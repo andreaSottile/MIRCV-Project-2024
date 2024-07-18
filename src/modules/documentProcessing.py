@@ -18,7 +18,7 @@ stemming algorithm or similar. For stopword removal, you can use any english
 stopwords list available on the Web. Ideally, your program should have a compile
 flag that allows you to enalbe/disble stemming & stopword removal.
 """
-import csv
+import io
 
 import pandas as pd
 from pandas import DataFrame
@@ -26,79 +26,84 @@ from pandas import DataFrame
 from src.config import collection_path_config, print_log, limit_input_rows_config, chunk_size_config
 import tarfile
 
-read_rows = 0
-
 
 def open_dataset():
-    global read_rows
     # avoid pandas truncation
     pd.set_option('display.max_colwidth', None)
     # reset row counter
     read_rows = 0
     print_log("opening dataset file", priority=3)
-    if collection_path_config.endswith(".gz"):
+    if tarfile.is_tarfile(collection_path_config):
         # working with compressed file, required uncompression
         print_log("Opening tar.gz file", priority=2)
 
         tar = tarfile.open(collection_path_config, "r:gz")
+
         for member in tar.getmembers():
-            print_log("tar.gz uncompression: starting", priority=4)
-            dataset_raw = tar.extractfile(member)
-            print_log("tar.gz uncompression: finished", priority=4)
+            if member.isfile() and member.name.endswith(".tsv"):
+                print_log("tar.gz uncompression: starting", priority=4)
+                dataset_raw = tar.extractfile(member)
+                # convert uncompressed stream into filelike object in memory
+                buffer = io.TextIOWrapper(dataset_raw, encoding='utf-8')
 
-            for chunk in split_tsv_chunks(dataset_raw, chunk_size_config):
-                print_log("read progress: " + str(read_rows), priority=5)
-                if 0 < limit_input_rows_config <= read_rows:
-                    break
-                process_dataset_chunk(chunk)
-                read_rows += chunk_size_config
+                print_log("tar.gz uncompression: finished", priority=4)
 
-            print_log("read finished", priority=4)
+                read_rows += ingest_dataset(buffer)
 
-    if collection_path_config.endswith(".tsv"):
+    elif collection_path_config.endswith(".tsv"):
         # working with .tsv file
         print_log("Opening .tsv file", priority=2)
 
-        for chunk in split_tsv_chunks(collection_path_config, chunk_size_config):
-            print_log("read progress: " + str(read_rows), priority=5)
-            if 0 < limit_input_rows_config <= read_rows:
-                break
-            process_dataset_chunk(chunk)
-            read_rows += chunk_size_config
-
-        print_log("read finished", priority=4)
+        read_rows += ingest_dataset(collection_path_config)
 
     print_log("input phase done, returning to parsing", priority=3)
     return "rows read from dataset: " + str(read_rows)
 
 
+def ingest_dataset(ds_path):
+    row_counter = 0
+    print_log("reading " + str(ds_path), priority=3)
+    for chunk in split_tsv_chunks(ds_path, chunk_size_config):
+        if 0 < limit_input_rows_config <= row_counter:
+            break
+        process_dataset_chunk(chunk)
+        print_log("read progress: " + str(row_counter), priority=5)
+        row_counter += len(chunk)
+    print_log("read finished", priority=4)
+    # returns number of read rows, to check dataset size
+    return row_counter
+
+
 def split_tsv_chunks(file_path, chunk_size=1):
-    global read_rows
+    rows_progress = 0
     excluded = []
     while True:
         try:
-            chunk = pd.read_csv(file_path, sep='\t', header=None, skiprows=read_rows,
+            chunk = pd.read_csv(file_path, sep='\t', header=None, skiprows=rows_progress,
                                 nrows=chunk_size, encoding='utf-8', engine='python')
             if chunk.empty:
                 break
+            print_log("Extracting chunk " + str(rows_progress / chunk_size), priority=5)
+
+            rows_progress += len(chunk)
             yield chunk
         except pd.errors.EmptyDataError:
             # Break the loop if there are no more data to read
             break
         except pd.errors.ParserError:
-            print_log("error on parsing near row " + str(read_rows), priority=3)
-            excluded.append(read_rows)
+            print_log("error on parsing near row " + str(rows_progress), priority=3)
+            excluded.append(rows_progress)
             continue
         except UnicodeDecodeError:
-            print_log("unreadable char found near row " + str(read_rows), priority=3)
-            excluded.append(read_rows)
+            # without the ioWrapper, this error used to happen frequently
+            print_log("unreadable char found near row " + str(rows_progress), priority=3)
+            excluded.append(rows_progress)
             continue
     print(len(excluded))
     print(excluded)
 
 
 def process_dataset_chunk(chunk):
-    global read_rows
     if type(chunk) is DataFrame:
         # check that each row has two elements <id,text>
         if chunk.values.shape[1] == 2:
@@ -109,11 +114,10 @@ def process_dataset_chunk(chunk):
             print_log(str(chunk), priority=3)
             print_log("== end of dump ==", priority=3)
     else:
-        print_log("invalid chunk format near line " + str(read_rows), priority=3)
+        print_log("found invalid chunk format", priority=3)
 
 
 def process_dataset_row(d_id, d_text):
-    global read_rows
     if d_id:
         print(d_id)
         if d_text:
@@ -121,7 +125,7 @@ def process_dataset_row(d_id, d_text):
         else:  # invalid doc text
             print_log("no text found for docid " + str(d_id), priority=3)
     else:  # invalid doc id
-        print_log("found invalid docid near row " + str(read_rows), priority=3)
+        print_log("found invalid docid", priority=3)
 
 
 def fetch_data_row_from_collection(row_index):
