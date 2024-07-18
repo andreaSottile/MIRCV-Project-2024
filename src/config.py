@@ -3,14 +3,12 @@ IMPORTANT: THIS FILE IS NOT UPDATED BY GIT
 IT REQUIRES MANUAL CONFIGURATION ON EACH MACHINE
 """
 ''' LOCAL PATHS '''
-# path lorenzo
-full_collection_compressed = "D:/Repositories/mircv/dataset/collection.tar.gz"
-test_collection_uncompressed = "D:/Repositories/mircv/dataset/test.tsv"
-full_collection_uncompressed = "D:/Repositories/mircv/dataset/collection.tsv"
+# path Andrea
+full_collection_compressed = "C:/Users/andre/Downloads/collection.tar.gz"
+test_collection_uncompressed = "C:/Users/andre/Downloads/collection.tsv"
 
 '''collection_path : this is the LOCAL path to the dataset.'''
-collection_path_config = full_collection_uncompressed
-
+collection_path_config = full_collection_compressed
 '''
 Dataset Specification. You must use the MSMARCO Passages collection1 available on
 this page: https://microsoft.github.io/msmarco/TREC-Deep-Learning-2020. Scroll
@@ -68,7 +66,7 @@ If limit is zero, then all the rows are going to  be read (no limit)
 # 1000 rows -> 12 s
 # 3800 rows -> 18 s
 # 100000 rows -> 47 s
-limit_input_rows_config = 1000
+limit_input_rows_config = 100000
 
 '''
 CHUNK SIZE CONFIG
