@@ -18,7 +18,7 @@ def test_read(docid):
     print(d)
     print(t[0])
     toc = time.perf_counter()
-    print(f"Downloaded the tutorial in {toc - tic:0.4f} seconds")
+    print(f"read completed in {toc - tic:0.4f} seconds")
 
 
 # docid    # query on compressed   # query on uncompressed
