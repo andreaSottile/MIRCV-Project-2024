@@ -20,15 +20,15 @@ flag that allows you to enalbe/disble stemming & stopword removal.
 """
 import pandas as pd
 import io
-import csv
-from src.config import collection_path_config, print_log, limit_input_rows_config, chunk_size_config
+from src.config import collection_path_config, print_log, limit_input_rows_config
 import tarfile
 
-read_rows = 0
+from src.modules.invertedIndex import add_document_to_index
 
 
-def open_dataset():
-    global read_rows
+def open_dataset(count_limit=-1, index=None):
+    if count_limit > 0 and 0 < limit_input_rows_config < count_limit:
+        count_limit = limit_input_rows_config
     # reset row counter
     read_rows = 0
     print_log("opening dataset file", priority=3)
@@ -47,11 +47,11 @@ def open_dataset():
                 line = dataset_wrapped.readline()
                 if line:
                     print_log("read progress: " + str(read_rows), priority=5)
-                    if 0 < limit_input_rows_config <= read_rows:
+                    if 0 < count_limit <= read_rows:
                         break
                     content = line.strip().split("\t")
                     if len(content) == 2:
-                        process_dataset_row(content[0], content[1])
+                        process_dataset_row(read_rows, content[0], content[1], index)
                     else:
                         print_log("invalid line len at row " + str(read_rows), priority=4)
 
@@ -66,33 +66,35 @@ def open_dataset():
 
         dataset = pd.read_csv(collection_path_config, sep='\t', header=None)
         for line in dataset.values:
-            if 0 < limit_input_rows_config <= read_rows:
+            if 0 < count_limit <= read_rows:
                 break
             print(line)
             if len(line) == 2:
-                process_dataset_row(line[0], line[1])
+                process_dataset_row(read_rows, line[0], line[1], index)
             else:
                 print_log("invalid line len at row " + str(read_rows), priority=4)
 
             read_rows += 1
         print_log("read finished", priority=4)
 
-
-
     print_log("input phase done, returning to parsing", priority=3)
     return "rows read from dataset: " + str(read_rows)
 
 
-def process_dataset_row(d_id, d_text):
-    global read_rows
-    if d_id:
-        print(d_id)
+def process_dataset_row(d_id, d_no, d_text, index=None):
+    if d_no:
+        print_log("processing row " + str(d_id), priority=5)
         if d_text:
-            print(d_text)
+            if index is not None:
+                # index structure is created outside
+                add_document_to_index(index, d_id, d_no, d_text)
+            else:
+                # this function is just a print if not associated with an index
+                print(d_text)
         else:  # invalid doc text
             print_log("no text found for docid " + str(d_id), priority=3)
     else:  # invalid doc id
-        print_log("found invalid docid near row " + str(read_rows), priority=3)
+        print_log("found invalid docid near row " + str(d_id), priority=3)
 
 
 def fetch_data_row_from_collection(row_index):

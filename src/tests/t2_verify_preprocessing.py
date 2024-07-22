@@ -1,7 +1,9 @@
 import time
+from collections import Counter
+
 from nltk.corpus import stopwords
 from src.modules.documentProcessing import open_dataset, fetch_data_row_from_collection
-from src.modules.preprocessing import clean_text, remove_stopwords, stemming
+from src.modules.preprocessing import clean_text, remove_stopwords, stemming, tokenizer
 
 stop_words = set(stopwords.words('english'))
 punctuation_signs = []
@@ -20,15 +22,21 @@ def test_read(docid):
     clean = clean_text(raw_text)
     print("clean text")
     print(clean)
-    stemmed = remove_stopwords(clean)
+    tokens = tokenizer(clean)
+    clean_tokens = remove_stopwords(tokens)
     print("no stopwords text")
-    print(stemmed)
-    stemmed = stemming(stemmed)
+    print(clean_tokens)
+    stemmed = stemming(clean_tokens)
     print("stemmed")
     print(stemmed)
     tac = time.perf_counter()
     print(f"read completed in {toc - tic:0.4f} seconds")
     print(f"preprocessing completed in {tac - toc:0.4f} seconds")
+
+    count = Counter(stemmed)
+    print("PRINTING COUNT LIST")
+    for line in count.items():
+        print(line)
 
 
 # docid
