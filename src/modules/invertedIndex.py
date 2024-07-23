@@ -16,7 +16,10 @@ performance.
 from src.config import print_log, index_folder_path, index_config_path, index_chunk_size
 import os
 
+from src.modules.compression import compress_index
+from src.modules.documentProcessing import open_dataset
 from src.modules.preprocessing import preprocess_text, count_token_occurrences
+from src.modules.searchResult import searchResult
 
 file_format = ".txt"
 file_blank_tag = "missing"
@@ -31,9 +34,10 @@ posting_buffer = []
 
 class invertedIndex:
     def __init__(self):
-        self.name = "not set"
+        self.name = member_blank_tag
         self.skip_stemming = True
         self.allow_stop_words = True
+        self.compression = False
         self.content = []
         self.topk = 0
         self.algorithm = member_blank_tag
@@ -54,6 +58,13 @@ class invertedIndex:
         self.name = str(name)
         print_log("index " + str(old) + " renamed as " + str(name), priority=3)
 
+    def is_ready(self):
+        if self.name != member_blank_tag and self.collection_statistics_path != file_blank_tag and \
+                self.index_file_path != file_blank_tag and self.lexicon_path != file_blank_tag and \
+                self.config_path != file_blank_tag:
+            return True
+        return False
+
     def save_on_disk(self):
         global file_format
         # index config and options are saved on disk, generating a filename based on its name
@@ -72,7 +83,10 @@ class invertedIndex:
                 config_file.write("allow_sw")
             else:
                 config_file.write("remove_sw")
-
+            if self.compression:
+                config_file.write("compress")
+            else:
+                config_file.write("uncompressed")
             config_file.write(self.content_to_str())
             config_file.write(str(self.topk))
             config_file.write(self.algorithm)
@@ -117,6 +131,7 @@ class invertedIndex:
                     print_log("index " + str(self.name) + " is about to be loaded", priority=2)
                     self.skip_stemming = (config_file.readline() == "skip_stem")
                     self.allow_stop_words = (config_file.readline() == "allow_sw")
+                    self.compression = (config_file.readline() == "compress")
 
                     self.content_reinit(config_file.readline())
                     self.topk = int(config_file.readline())
@@ -193,16 +208,54 @@ class invertedIndex:
             collection.write(str(docid) + collection_separator + str(docno) + collection_separator + str(stats))
 
     def update_posting_list(self):
-        # write posting list to disk
+        # write a chunk of posting lists to disk
         global posting_buffer
-
-        return  # TODO
+        with open(self.index_file_path, "a") as file:
+            for row in posting_buffer:
+                file.write(row)
+        posting_buffer = []
 
     def update_to_lexicon(self):
-        # write lexicon to disk
+        # write a chunk of lexicon words to disk
         global lexicon_buffer
+        with open(self.lexicon_path, "a") as file:
+            for row in lexicon_buffer:
+                file.write(row)
+        lexicon_buffer = []
+
+    def scan_dataset(self, limit_row_size=-1, delete_after_compression=False):
+        print_log("starting dataset scan", priority=1)
+        print_log("scan limited to " + str(limit_row_size) + " rows", priority=4)
+        open_dataset(limit_row_size, self)
+        print_log("dataset scan completed", priority=3)
+        if self.compression:
+            print_log("compressing index file", priority=1)
+            compress_index(self.name, self.index_file_path, self.lexicon_path)
+            print_log("compression finished", priority=3)
+            if delete_after_compression:
+                print_log("deleted uncompressed index file", priority=1)
+                os.remove(self.index_file_path)
+
+    def query(self, query_string):
+        res = searchResult(self.topk)
         # TODO
-        return
+        if not self.is_ready():
+            print_log("CRITICAL ERROR: query on uninitialized index", priority=0)
+
+        # TODO prepare query_string
+
+        if self.compression:
+            # TODO compressed read
+            pass
+        else:
+            # TODO uncompressed read
+            pass
+
+        # TODO ranking
+        # usare res.append_result(item,score)
+
+        # TODO: return best results
+        return res
 
 
 def add_posting_list(token_id, token_count, docid):
@@ -229,7 +282,7 @@ def add_to_lexicon(token_id):
 
 
 def add_document_to_index(index, docid, docno, doctext):
-    if str(index.name) == member_blank_tag:
+    if not index.is_ready():
         print_log("cannot add document with uninitialized index", priority=0)
 
     is_duplicate = index.add_content_id(docid)
