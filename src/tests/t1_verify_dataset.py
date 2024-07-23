@@ -12,6 +12,7 @@ data = open_dataset()
 print(data)
 
 
+
 def test_read(docid):
     tic = time.perf_counter()
     d, t = fetch_data_row_from_collection(docid)

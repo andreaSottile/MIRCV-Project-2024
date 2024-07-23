@@ -207,21 +207,27 @@ class invertedIndex:
         with open(self.collection_statistics_path, mode="a") as collection:
             collection.write(str(docid) + collection_separator + str(docno) + collection_separator + str(stats))
 
-    def update_posting_list(self):
+    def update_posting_list(self, filename):
         # write a chunk of posting lists to disk
         global posting_buffer
-        with open(self.index_file_path, "a") as file:
-            for row in posting_buffer:
+        posting_buffer_sorted = sorted(posting_buffer, key=lambda x: x[1][0])
+        chunk_name= os.path.join(index_folder_path, self.name + filename)
+        with open(chunk_name, "w+") as file:
+            for row in posting_buffer_sorted:
                 file.write(row)
         posting_buffer = []
+        return
 
-    def update_to_lexicon(self):
+    def update_to_lexicon(self, filename):
         # write a chunk of lexicon words to disk
         global lexicon_buffer
-        with open(self.lexicon_path, "a") as file:
+        lexicon_buffer_sorted = sorted(posting_buffer, key=lambda x: x[1][0])
+        chunk_name = os.path.join(index_folder_path, self.name + filename)
+        with open(chunk_name, "w+") as file:
             for row in lexicon_buffer:
                 file.write(row)
         lexicon_buffer = []
+        return
 
     def scan_dataset(self, limit_row_size=-1, delete_after_compression=False):
         print_log("starting dataset scan", priority=1)
@@ -269,12 +275,15 @@ def add_posting_list(token_id, token_count, docid):
         return False  # no need to write it on disk yet
 
 
-def add_to_lexicon(token_id):
+def add_to_lexicon(token_id, token_count):
     # add new word into lexicon
     global lexicon_buffer
-    word = str(token_id)
-    if word not in lexicon_buffer:
-        lexicon_buffer.append(word)
+    for token in lexicon_buffer:
+        if token[0] != token_id:
+            lexicon_buffer.append([token_id, token_count])
+        else:
+            #TODO DA TESTARE
+            token[1] += token_count
     if len(lexicon_buffer) > index_chunk_size:
         return True  # chunk is big, time to write it on disk
     else:
@@ -282,6 +291,8 @@ def add_to_lexicon(token_id):
 
 
 def add_document_to_index(index, docid, docno, doctext):
+    posting_file_list=[]
+    lexicon_file_list=[]
     if not index.is_ready():
         print_log("cannot add document with uninitialized index", priority=0)
 
@@ -300,10 +311,12 @@ def add_document_to_index(index, docid, docno, doctext):
 
     for token_id, token_count in token_counts:
         # inverted index is based on posting lists
-        full = index.add_posting_list(token_id, token_count, docid)
+        full = add_posting_list(token_id, token_count, docid)
         if full:
-            index.update_posting_list()
+            posting_file_list.append(index.update_posting_list())
         # update lexicon at each new word
-        full = index.add_to_lexicon(token_id)
+        full = add_to_lexicon(token_id)
         if full:
-            index.update_lexicon()
+            lexicon_file_list.append(index.update_lexicon())
+    # TODO MERGE LEXICON
+    # TODO MERGE POSTING

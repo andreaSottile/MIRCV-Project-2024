@@ -19,7 +19,7 @@ collection_path_config = full_collection_compressed
 # EDIT HERE
 index_config_path = "D:/Repositories/mircv/dataset/index_info_"  # file name is going to be added at the end
 # EDIT HERE
-index_folder_path = "D:/Repositories/mircv/dataset/index/"  # folder is going to contain several files for each index
+index_folder_path = "D:/Repositories/mircv/dataset/index"  # folder is going to contain several files for each index
 
 '''
 Dataset Specification. You must use the MSMARCO Passages collection1 available on
