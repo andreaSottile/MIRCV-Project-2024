@@ -210,24 +210,35 @@ class invertedIndex:
     def update_posting_list(self, filename):
         # write a chunk of posting lists to disk
         global posting_buffer
-        posting_buffer_sorted = sorted(posting_buffer, key=lambda x: x[1][0])
-        chunk_name= os.path.join(index_folder_path, self.name + filename)
-        with open(chunk_name, "w+") as file:
+        # posting_buffer is a list where each element have this structure:
+        #     [token_id, [docid, token_count]]
+        posting_buffer_sorted = sorted(posting_buffer, key=lambda x: x[0])
+        chunk_name = os.path.join(index_folder_path, self.name + filename)
+        with open(chunk_name, "w") as file:
             for row in posting_buffer_sorted:
-                file.write(row)
+                row_string = str(row[0]) + posting_separator
+                for pair in row[1:]:
+                    element = docid_separator.join(pair)
+                    if pair == row[-1]:
+                        row_string += element
+                    else:
+                        row_string += element + element_separator
+                file.write(row_string)
         posting_buffer = []
-        return
+        return chunk_name
 
     def update_to_lexicon(self, filename):
         # write a chunk of lexicon words to disk
         global lexicon_buffer
-        lexicon_buffer_sorted = sorted(posting_buffer, key=lambda x: x[1][0])
+        # lexicon_buffer is a list where each element have this structure:
+        #     [token_id, token_count]
+        lexicon_buffer_sorted = sorted(lexicon_buffer, key=lambda x: x[0])
         chunk_name = os.path.join(index_folder_path, self.name + filename)
-        with open(chunk_name, "w+") as file:
-            for row in lexicon_buffer:
-                file.write(row)
+        with open(chunk_name, "w") as file:
+            for row in lexicon_buffer_sorted:
+                file.write(element_separator.join(row))
         lexicon_buffer = []
-        return
+        return chunk_name
 
     def scan_dataset(self, limit_row_size=-1, delete_after_compression=False):
         print_log("starting dataset scan", priority=1)
@@ -267,8 +278,22 @@ class invertedIndex:
 def add_posting_list(token_id, token_count, docid):
     # add new entries in posting list
     global posting_buffer
-    stats = [token_id, token_count]
-    posting_buffer.append([docid, stats])
+    stats = [docid, token_count]
+    found_token = False
+    found_doc = False
+    for posting_list in posting_buffer:
+        if posting_list[0] == token_id:
+            found_token = True
+            for pair in posting_list[1:]:
+                if pair[0] == docid:
+                    found_doc = True
+                    pair[1] += token_count
+                    break
+            if not found_doc:
+                posting_list.append(stats)
+            break
+    if not found_token:
+        posting_buffer.append([token_id, stats])
     if len(posting_buffer) > index_chunk_size:
         return True  # chunk is big, time to write it on disk
     else:
@@ -278,21 +303,65 @@ def add_posting_list(token_id, token_count, docid):
 def add_to_lexicon(token_id, token_count):
     # add new word into lexicon
     global lexicon_buffer
+    found = False
     for token in lexicon_buffer:
-        if token[0] != token_id:
-            lexicon_buffer.append([token_id, token_count])
-        else:
-            #TODO DA TESTARE
+        if token[0] == token_id:
+            found = True
             token[1] += token_count
+            break
+    if found == False:
+        lexicon_buffer.append([token_id, token_count])
     if len(lexicon_buffer) > index_chunk_size:
         return True  # chunk is big, time to write it on disk
     else:
         return False  # no need to write it on disk yet
 
 
+def merge_chunks(file_list, output_file_path, mode=""):
+    reader_list = []
+    first_element_list = []
+    for file in file_list:
+        reader = open(file, "r+")
+        reader_list.append(reader)
+        first_element_list.append(reader.readline())
+    output_file = open(output_file_path, "w+")
+    while True:
+        next_index = -1
+        # cerco in ogni elemento di firstelemlist
+        i = 0
+        output_row = ""
+        output_key = ""
+        for element in first_element_list:
+            # controllo che quella lista abbia ancora elementi
+            if element is not "empty":
+                if mode == "posting":
+                    element_splitted = element.split(sep=posting_separator)
+                    # estraggo l'elemento alfabeticamente minore
+                    if output_key == "" or element_splitted[0] < output_key:
+                        output_key, output_row = element_splitted[0], element
+                        next_index = i
+                elif mode == "lexicon":
+                    pass
+                else:
+                    print_log("CRITICAL ERROR: Unknown merge mode")
+            i += 1
+        if next_index > -1:
+            # rimpiazzo l'elemento estratto leggendo il successivo
+            first_element_list[i] = reader_list[i].readline()
+            if len(first_element_list[i]) == 0:
+                first_element_list[i] = "empty"
+            # lo scrivo nel file output
+            output_file.write(output_row)
+        else:
+            # se tutte le liste sono vuote, ho finito
+            break
+    for file in file_list:
+        file.close()
+    output_file.close()
+
 def add_document_to_index(index, docid, docno, doctext):
-    posting_file_list=[]
-    lexicon_file_list=[]
+    posting_file_list = []
+    lexicon_file_list = []
     if not index.is_ready():
         print_log("cannot add document with uninitialized index", priority=0)
 
@@ -318,5 +387,7 @@ def add_document_to_index(index, docid, docno, doctext):
         full = add_to_lexicon(token_id)
         if full:
             lexicon_file_list.append(index.update_lexicon())
+    merge_chunks(posting_file_list, index.index_file_path, mode="posting")
+    merge_chunks(lexicon_file_list, index.lexicon_path, mode="lexicon")
     # TODO MERGE LEXICON
     # TODO MERGE POSTING
