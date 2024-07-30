@@ -32,6 +32,14 @@ lexicon_buffer = []
 posting_buffer = []
 
 
+# REMINDER STRUTTURA POSTING
+# token posting_separator docid docid_separator count element_separator
+# token1:docid1|count;docid2|count;................docidN|count
+
+# REMINDER STRUTTURA LEXICON
+# token ; count
+
+
 class invertedIndex:
     def __init__(self):
         self.name = member_blank_tag
@@ -317,7 +325,7 @@ def add_to_lexicon(token_id, token_count):
         return False  # no need to write it on disk yet
 
 
-def merge_chunks(file_list, output_file_path, mode=""):
+def merge_chunks(file_list, output_file_path, mode="", delete_after_merge=True):
     reader_list = []
     first_element_list = []
     for file in file_list:
@@ -326,11 +334,12 @@ def merge_chunks(file_list, output_file_path, mode=""):
         first_element_list.append(reader.readline())
     output_file = open(output_file_path, "w+")
     while True:
-        next_index = -1
+        next_chunk_index = []
         # cerco in ogni elemento di firstelemlist
         i = 0
         output_row = ""
         output_key = ""
+        # esamino il primo elemento di ogni file, cerco il minore e scrivo la sua posizione in next_index
         for element in first_element_list:
             # controllo che quella lista abbia ancora elementi
             if element is not "empty":
@@ -338,26 +347,47 @@ def merge_chunks(file_list, output_file_path, mode=""):
                     element_splitted = element.split(sep=posting_separator)
                     # estraggo l'elemento alfabeticamente minore
                     if output_key == "" or element_splitted[0] < output_key:
-                        output_key, output_row = element_splitted[0], element
-                        next_index = i
+                        output_key, output_row = element_splitted[0], element_splitted[1]
+                        next_chunk_index = [i]
+                    elif element_splitted[0] == output_key:
+                        # token1:docid1|count;docid2|count;................docidN|count
+                        token_doc_unordered_string = element_splitted[1] + element_separator + output_row
+                        output_row = sorted(token_doc_unordered_string.split(element_separator),
+                                            key=lambda x: x.split(docid_separator)[0])
+                        next_chunk_index.append(i)
                 elif mode == "lexicon":
-                    pass
+                    element_splitted = element.split(sep=element_separator)
+                    # estraggo l'elemento alfabeticamente minore
+                    if output_key == "" or element_splitted[0] < output_key:
+                        output_key, output_row = element_splitted[0], int(element_splitted[1])
+                        next_chunk_index = [i]
+                    elif element_splitted[0] == output_key:
+                        # token ; count
+                        output_row += int(element_splitted[1])
+                        next_chunk_index.append(i)
                 else:
                     print_log("CRITICAL ERROR: Unknown merge mode")
             i += 1
-        if next_index > -1:
+        if len(next_chunk_index) > 0:
             # rimpiazzo l'elemento estratto leggendo il successivo
-            first_element_list[i] = reader_list[i].readline()
-            if len(first_element_list[i]) == 0:
-                first_element_list[i] = "empty"
+            for index in next_chunk_index:
+                first_element_list[index] = reader_list[index].readline()
+                if len(first_element_list[index]) == 0:
+                    first_element_list[index] = "empty"
             # lo scrivo nel file output
-            output_file.write(output_row)
+            if mode == "posting":
+                output_file.write(output_key + posting_separator + output_row)
+            elif mode == "lexicon":
+                output_file.write(output_key + element_separator +str(output_row))
         else:
             # se tutte le liste sono vuote, ho finito
             break
     for file in file_list:
         file.close()
+        if delete_after_merge:
+            os.remove(file)
     output_file.close()
+
 
 def add_document_to_index(index, docid, docno, doctext):
     posting_file_list = []
@@ -377,17 +407,17 @@ def add_document_to_index(index, docid, docno, doctext):
     # document length to be saved in collection statistics
     word_count = len(tokens)
     index.add_to_collection_stats(docid, docno, word_count)
-
     for token_id, token_count in token_counts:
         # inverted index is based on posting lists
         full = add_posting_list(token_id, token_count, docid)
         if full:
-            posting_file_list.append(index.update_posting_list())
+            posting_file_list.append(
+                index.update_posting_list("chunk_posting_" + str(len(posting_file_list) + file_format)))
         # update lexicon at each new word
         full = add_to_lexicon(token_id)
         if full:
-            lexicon_file_list.append(index.update_lexicon())
-    merge_chunks(posting_file_list, index.index_file_path, mode="posting")
-    merge_chunks(lexicon_file_list, index.lexicon_path, mode="lexicon")
-    # TODO MERGE LEXICON
-    # TODO MERGE POSTING
+            lexicon_file_list.append(
+                index.update_to_lexicon("chunk_lexicon_" + str(len(lexicon_file_list) + file_format)))
+    # delete_after_merge=False per verificare struttura dei file di chunk
+    merge_chunks(posting_file_list, index.index_file_path + file_format, mode="posting", delete_after_merge=False)
+    merge_chunks(lexicon_file_list, index.lexicon_path + file_format, mode="lexicon", delete_after_merge=False)
