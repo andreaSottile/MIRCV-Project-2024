@@ -13,7 +13,7 @@ gzip for index compression. Ideally, your program should have a compile flag
 that allows you to use ASCII format during debugging and binary format for
 performance.
 '''
-from src.config import print_log, index_folder_path, index_config_path, index_chunk_size
+from src.config import print_log, index_folder_path, index_config_path, index_chunk_size, verbosity_config
 import os
 
 from src.modules.compression import compress_index
@@ -28,8 +28,11 @@ collection_separator = ","
 posting_separator = ":"
 element_separator = ";"
 docid_separator = "|"
-lexicon_buffer = []
-posting_buffer = []
+chunk_line_separator = "\n"
+lexicon_buffer = []  # memory buffer
+posting_buffer = []  # memory buffer
+posting_file_list = []  # list of file names
+lexicon_file_list = []  # list of file names
 
 
 # REMINDER STRUTTURA POSTING
@@ -41,6 +44,7 @@ posting_buffer = []
 
 
 class invertedIndex:
+
     def __init__(self):
         self.name = member_blank_tag
         self.skip_stemming = True
@@ -64,7 +68,7 @@ class invertedIndex:
             return
         old = self.name
         self.name = str(name)
-        print_log("index " + str(old) + " renamed as " + str(name), priority=3)
+        print_log("index \'" + str(old) + "\' renamed as \'" + str(self.name) + "\'", priority=3)
 
     def is_ready(self):
         if self.name != member_blank_tag and self.collection_statistics_path != file_blank_tag and \
@@ -73,42 +77,59 @@ class invertedIndex:
             return True
         return False
 
+    def delete_from_disk(self):
+        if self.collection_statistics_path != file_blank_tag:
+            os.remove(self.collection_statistics_path)
+            self.collection_statistics_path = file_blank_tag
+        if self.index_file_path != file_blank_tag:
+            os.remove(self.index_file_path)
+            self.index_file_path = file_blank_tag
+        if self.lexicon_path != file_blank_tag:
+            os.remove(self.lexicon_path)
+            self.lexicon_path = file_blank_tag
+        if self.config_path != file_blank_tag:
+            os.remove(self.config_path)
+            self.config_path = file_blank_tag
+
     def save_on_disk(self):
         global file_format
         # index config and options are saved on disk, generating a filename based on its name
-        if self.config_path == file_blank_tag:
+        if self.name == member_blank_tag:
             print_log("cannot save index config without a name", priority=2)
             return
+        if self.config_path == file_blank_tag:
+            print_log("saving " + str(self.name) + " for the first time", priority=4)
+            self.config_path = index_config_path + str(self.name) + file_format
         with open(self.config_path, mode="w") as config_file:
             # the index config file is overwritten each time it's modified
             print_log("saving index config", priority=1)
-            config_file.write(self.name)
+            config_file.write(self.name + chunk_line_separator)
             if self.skip_stemming:
-                config_file.write("skip_stem")
+                config_file.write("skip_stem" + chunk_line_separator)
             else:
-                config_file.write("do_stem")
+                config_file.write("do_stem" + chunk_line_separator)
             if self.allow_stop_words:
-                config_file.write("allow_sw")
+                config_file.write("allow_sw" + chunk_line_separator)
             else:
-                config_file.write("remove_sw")
+                config_file.write("remove_sw" + chunk_line_separator)
             if self.compression:
-                config_file.write("compress")
+                config_file.write("compress" + chunk_line_separator)
             else:
-                config_file.write("uncompressed")
-            config_file.write(self.content_to_str())
-            config_file.write(str(self.topk))
-            config_file.write(self.algorithm)
-            config_file.write(self.scoring)
-            config_file.write(self.evaluation)
+                config_file.write("uncompressed" + chunk_line_separator)
+            config_file.write(self.content_to_str() + chunk_line_separator)
+            config_file.write(str(self.topk) + chunk_line_separator)
+            config_file.write(str(self.algorithm) + chunk_line_separator)
+            config_file.write(str(self.scoring) + chunk_line_separator)
+            config_file.write(str(self.evaluation) + chunk_line_separator)
 
-            config_file.write(os.path.join(index_config_path, "stats" + file_format))
-            self.collection_statistics_path = os.path.join(index_config_path, "stats" + file_format)
-            config_file.write(os.path.join(index_config_path, "index" + file_format))
-            self.index_file_path = (index_folder_path + "index" + file_format)
-            config_file.write(os.path.join(index_config_path, "lexicon" + file_format))
-            self.lexicon_path = os.path.join(index_config_path, "lexicon" + file_format)
+            self.collection_statistics_path = index_folder_path + self.name + "/" + "stats" + file_format
+            self.index_file_path = index_folder_path + self.name + "/" + "index" + file_format
+            self.lexicon_path = index_folder_path + self.name + "/" + "lexicon" + file_format
 
-            self.config_path = index_config_path + str(self.name) + file_format
+            config_file.write(self.collection_statistics_path + chunk_line_separator)
+            config_file.write(self.index_file_path + chunk_line_separator)
+            config_file.write(self.lexicon_path + chunk_line_separator)
+
             print_log("index config saved successfully", priority=3)
 
     def load_from_disk(self, name):
@@ -167,6 +188,9 @@ class invertedIndex:
             if line != "":
                 line += element_separator
             line += str(element[0]) + collection_separator + str(element[1])
+        if line == "":
+            return "empty"
+
         return line
 
     def content_reinit(self, content_string):
@@ -213,45 +237,58 @@ class invertedIndex:
             print_log("CRITICAL ERROR: unable to access collection statistics for " + self.name, priority=0)
             return
         with open(self.collection_statistics_path, mode="a") as collection:
-            collection.write(str(docid) + collection_separator + str(docno) + collection_separator + str(stats))
+            collection.write(str(docid) + collection_separator + str(docno) + collection_separator + str(
+                stats) + chunk_line_separator)
 
     def update_posting_list(self, filename):
         # write a chunk of posting lists to disk
+        # @ param filename: output file path (complete with file format)
         global posting_buffer
         # posting_buffer is a list where each element have this structure:
         #     [token_id, [docid, token_count]]
+
+        # MANDATORY: every chunk must be ordinated
         posting_buffer_sorted = sorted(posting_buffer, key=lambda x: x[0])
-        chunk_name = os.path.join(index_folder_path, self.name + filename)
+        chunk_name = index_folder_path + self.name + "/" + filename
+        print_log("Writing new posting file chunk to file. dumping chunk here: ", 4)
+        if verbosity_config >= 4:
+            print(posting_buffer_sorted)
         with open(chunk_name, "w") as file:
             for row in posting_buffer_sorted:
                 row_string = str(row[0]) + posting_separator
                 for pair in row[1:]:
-                    element = docid_separator.join(pair)
+                    element = str(pair[0]) + docid_separator + str(pair[1])
                     if pair == row[-1]:
                         row_string += element
                     else:
                         row_string += element + element_separator
-                file.write(row_string)
+                file.write(row_string + chunk_line_separator)
         posting_buffer = []
         return chunk_name
 
     def update_to_lexicon(self, filename):
         # write a chunk of lexicon words to disk
+        # @ param filename: output file path (complete with file format)
         global lexicon_buffer
         # lexicon_buffer is a list where each element have this structure:
         #     [token_id, token_count]
+
+        # MANDATORY: every chunk must be ordinated
         lexicon_buffer_sorted = sorted(lexicon_buffer, key=lambda x: x[0])
-        chunk_name = os.path.join(index_folder_path, self.name + filename)
+        chunk_name = index_folder_path + self.name + "/" + filename
+        print_log("Writing lexicon chunk chunk to file. dumping chunk here: ", 4)
+        if verbosity_config >= 4:
+            print(lexicon_buffer_sorted)
         with open(chunk_name, "w") as file:
             for row in lexicon_buffer_sorted:
-                file.write(element_separator.join(row))
+                file.write(str(row[0]) + element_separator + str(row[1]) + chunk_line_separator)
         lexicon_buffer = []
         return chunk_name
 
     def scan_dataset(self, limit_row_size=-1, delete_after_compression=False):
         print_log("starting dataset scan", priority=1)
         print_log("scan limited to " + str(limit_row_size) + " rows", priority=4)
-        open_dataset(limit_row_size, self)
+        open_dataset(limit_row_size, self, add_document_to_index)
         print_log("dataset scan completed", priority=3)
         if self.compression:
             print_log("compressing index file", priority=1)
@@ -283,9 +320,34 @@ class invertedIndex:
         return res
 
 
+def index_setup(name, stemming_flag, stop_words_flag, compression_flag, k, algorithm, scoring_f, eval_f):
+    print_log("setup for new index", 4)
+    ind = invertedIndex()
+    print_log("created index", 4)
+    ind.rename(name)
+    print_log("setting flags", 4)
+    ind.skip_stemming = stemming_flag
+    ind.allow_stop_words = stop_words_flag
+    ind.compression = compression_flag
+    ind.topk = k
+    ind.algorithm = algorithm
+    ind.scoring = scoring_f
+    ind.evaluation = eval_f
+    print_log("setup completed, saving to disk", 3)
+    ind.save_on_disk()
+    print_log("saved complete", 4)
+    print_log(ind.config_path, 4)
+    print_log(ind.index_file_path, 4)
+    print_log(ind.collection_statistics_path, 4)
+    print_log(ind.lexicon_path, 4)
+
+    return ind
+
+
 def add_posting_list(token_id, token_count, docid):
     # add new entries in posting list
     global posting_buffer
+    print_log("adding new posting list: " + str(token_id), priority=5)
     stats = [docid, token_count]
     found_token = False
     found_doc = False
@@ -303,6 +365,7 @@ def add_posting_list(token_id, token_count, docid):
     if not found_token:
         posting_buffer.append([token_id, stats])
     if len(posting_buffer) > index_chunk_size:
+        print_log("posting memory buffer is full", priority=3)
         return True  # chunk is big, time to write it on disk
     else:
         return False  # no need to write it on disk yet
@@ -310,24 +373,28 @@ def add_posting_list(token_id, token_count, docid):
 
 def add_to_lexicon(token_id, token_count):
     # add new word into lexicon
+    # @ param token_id : token(string)
+    # @ param token_count : frequency of the token
     global lexicon_buffer
+    print_log("adding word to lexicon: " + str(token_id), priority=5)
     found = False
     for token in lexicon_buffer:
         if token[0] == token_id:
             found = True
             token[1] += token_count
             break
-    if found == False:
+    if not found:
         lexicon_buffer.append([token_id, token_count])
     if len(lexicon_buffer) > index_chunk_size:
+        print_log("lexicon memory buffer is full", priority=3)
         return True  # chunk is big, time to write it on disk
     else:
         return False  # no need to write it on disk yet
 
 
 def merge_chunks(file_list, output_file_path, mode="", delete_after_merge=True):
-    reader_list = []
-    first_element_list = []
+    reader_list = []  # list of pointers to files
+    first_element_list = []  # list of the next (lowest) element taken from each file
     for file in file_list:
         reader = open(file, "r+")
         reader_list.append(reader)
@@ -337,22 +404,25 @@ def merge_chunks(file_list, output_file_path, mode="", delete_after_merge=True):
         next_chunk_index = []
         # cerco in ogni elemento di firstelemlist
         i = 0
-        output_row = ""
-        output_key = ""
+        output_row = ""  # list of elements for the posting list
+                    # example of output row :: ["0|1" , "1|2"]
+        output_key = ""  # token as string
         # esamino il primo elemento di ogni file, cerco il minore e scrivo la sua posizione in next_index
         for element in first_element_list:
             # controllo che quella lista abbia ancora elementi
-            if element is not "empty":
+            if element != "empty":
+                element = element.replace("\n", "")
                 if mode == "posting":
                     element_splitted = element.split(sep=posting_separator)
                     # estraggo l'elemento alfabeticamente minore
                     if output_key == "" or element_splitted[0] < output_key:
-                        output_key, output_row = element_splitted[0], element_splitted[1]
+                        output_key, output_row = element_splitted[0], element_splitted[1].split(element_separator)
                         next_chunk_index = [i]
                     elif element_splitted[0] == output_key:
                         # token1:docid1|count;docid2|count;................docidN|count
-                        token_doc_unordered_string = element_splitted[1] + element_separator + output_row
-                        output_row = sorted(token_doc_unordered_string.split(element_separator),
+                        for ep in element_splitted[1].split(element_separator):
+                            output_row.append(ep)
+                        output_row = sorted(output_row,
                                             key=lambda x: x.split(docid_separator)[0])
                         next_chunk_index.append(i)
                 elif mode == "lexicon":
@@ -376,22 +446,36 @@ def merge_chunks(file_list, output_file_path, mode="", delete_after_merge=True):
                     first_element_list[index] = "empty"
             # lo scrivo nel file output
             if mode == "posting":
-                output_file.write(output_key + posting_separator + output_row)
+                line = ""
+                for e in output_row:
+                    line += e
+                    if e != output_row[-1]:
+                        line += element_separator
+                output_file.write(str(output_key) + posting_separator + line.replace("\n", "") + chunk_line_separator)
             elif mode == "lexicon":
-                output_file.write(output_key + element_separator +str(output_row))
+                output_file.write(output_key + element_separator + str(output_row) + chunk_line_separator)
         else:
             # se tutte le liste sono vuote, ho finito
             break
-    for file in file_list:
+    for file in reader_list:
         file.close()
-        if delete_after_merge:
-            os.remove(file)
+    if delete_after_merge:
+        for file_name in file_list:
+            os.remove(file_name)
     output_file.close()
 
 
-def add_document_to_index(index, docid, docno, doctext):
-    posting_file_list = []
-    lexicon_file_list = []
+def add_document_to_index(index, args):
+    global posting_file_list  # list of file names
+    global lexicon_file_list  # list of file names
+    if len(args) != 3:
+        print_log("CRITICAL ERROR: missing arguments to add document to index : " + str(args), 0)
+        return
+    if not os.path.exists(index_folder_path + index.name):
+        os.mkdir(index_folder_path + index.name)
+        print_log("created new directory for index files", priority=3)
+    docid, docno, doctext = args[0], args[1], args[2]
+
     if not index.is_ready():
         print_log("cannot add document with uninitialized index", priority=0)
 
@@ -411,13 +495,19 @@ def add_document_to_index(index, docid, docno, doctext):
         # inverted index is based on posting lists
         full = add_posting_list(token_id, token_count, docid)
         if full:
-            posting_file_list.append(
-                index.update_posting_list("chunk_posting_" + str(len(posting_file_list) + file_format)))
+            new_chunk_post = index.update_posting_list("chunk_posting_" + str(len(posting_file_list)) + file_format)
+            posting_file_list.append(new_chunk_post)
+            print_log("chunks created: ", 5)
+            if verbosity_config >= 5:
+                print(posting_file_list)
         # update lexicon at each new word
-        full = add_to_lexicon(token_id)
+        full = add_to_lexicon(token_id, token_count)
         if full:
-            lexicon_file_list.append(
-                index.update_to_lexicon("chunk_lexicon_" + str(len(lexicon_file_list) + file_format)))
+            new_chunk_lex = index.update_to_lexicon("chunk_lexicon_" + str(len(lexicon_file_list)) + file_format)
+            lexicon_file_list.append(new_chunk_lex)
+            print_log("chunks created: ", 5)
+            if verbosity_config >= 5:
+                print(lexicon_file_list)
     # delete_after_merge=False per verificare struttura dei file di chunk
-    merge_chunks(posting_file_list, index.index_file_path + file_format, mode="posting", delete_after_merge=False)
-    merge_chunks(lexicon_file_list, index.lexicon_path + file_format, mode="lexicon", delete_after_merge=False)
+    merge_chunks(posting_file_list, index.index_file_path, mode="posting", delete_after_merge=False)
+    merge_chunks(lexicon_file_list, index.lexicon_path, mode="lexicon", delete_after_merge=False)

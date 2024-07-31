@@ -23,10 +23,8 @@ import io
 from src.config import collection_path_config, print_log, limit_input_rows_config
 import tarfile
 
-from src.modules.invertedIndex import add_document_to_index
 
-
-def open_dataset(count_limit=-1, index=None):
+def open_dataset(count_limit=-1, index=None, process_function=None):
     if count_limit > 0 and 0 < limit_input_rows_config < count_limit:
         count_limit = limit_input_rows_config
     # reset row counter
@@ -51,7 +49,7 @@ def open_dataset(count_limit=-1, index=None):
                         break
                     content = line.strip().split("\t")
                     if len(content) == 2:
-                        process_dataset_row(read_rows, content[0], content[1], index)
+                        process_dataset_row(read_rows, content[0], content[1], process_function, index)
                     else:
                         print_log("invalid line len at row " + str(read_rows), priority=4)
 
@@ -70,7 +68,7 @@ def open_dataset(count_limit=-1, index=None):
                 break
             print(line)
             if len(line) == 2:
-                process_dataset_row(read_rows, line[0], line[1], index)
+                process_dataset_row(read_rows, line[0], line[1], process_function, index)
             else:
                 print_log("invalid line len at row " + str(read_rows), priority=4)
 
@@ -81,13 +79,13 @@ def open_dataset(count_limit=-1, index=None):
     return "rows read from dataset: " + str(read_rows)
 
 
-def process_dataset_row(d_id, d_no, d_text, index=None):
+def process_dataset_row(d_id, d_no, d_text, process_function=None, index=None):
     if d_no:
         print_log("processing row " + str(d_id), priority=5)
         if d_text:
-            if index is not None:
+            if index is not None and process_function is not None:
                 # index structure is created outside
-                add_document_to_index(index, d_id, d_no, d_text)
+                process_function(index, [d_id, d_no, d_text])
             else:
                 # this function is just a print if not associated with an index
                 print(d_text)
