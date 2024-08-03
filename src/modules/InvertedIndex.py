@@ -13,7 +13,9 @@ gzip for index compression. Ideally, your program should have a compile flag
 that allows you to use ASCII format during debugging and binary format for
 performance.
 '''
-from src.config import print_log, index_folder_path, index_config_path, index_chunk_size, verbosity_config
+from src.config import print_log, index_folder_path, index_config_path, index_chunk_size, verbosity_config, \
+    member_blank_tag, file_blank_tag, chunk_line_separator, element_separator, collection_separator, posting_separator, \
+    docid_separator
 import os
 
 from src.modules.compression import compress_index
@@ -21,14 +23,6 @@ from src.modules.documentProcessing import open_dataset
 from src.modules.preprocessing import preprocess_text, count_token_occurrences
 from src.modules.searchResult import searchResult
 
-file_format = ".txt"
-file_blank_tag = "missing"
-member_blank_tag = "not set"
-collection_separator = ","
-posting_separator = ":"
-element_separator = ";"
-docid_separator = "|"
-chunk_line_separator = "\n"
 lexicon_buffer = []  # memory buffer
 posting_buffer = []  # memory buffer
 posting_file_list = []  # list of file names
@@ -43,7 +37,7 @@ lexicon_file_list = []  # list of file names
 # token ; count
 
 
-class invertedIndex:
+class InvertedIndex:
 
     def __init__(self):
         self.name = member_blank_tag
@@ -132,12 +126,6 @@ class invertedIndex:
 
             print_log("index config saved successfully", priority=3)
 
-    def load_from_disk(self, name):
-        # function used to initialise a new invertedIndex by loading it from disk.
-        # @ param name: user is required to remember the name of the file on disk
-        self.rename(name)
-        self.reload_from_disk()
-
     def reload_from_disk(self):
         # function called to load a previously created index, by reading a config file
         print_log("loading index config file", priority=3)
@@ -146,39 +134,42 @@ class invertedIndex:
             if self.name == member_blank_tag:
                 # cannot retrieve a config file without its name
                 print_log("cannot load index config for index with no name", priority=1)
-                return
+                return False
             else:
                 # in the first execution, self.name has been set, but self.config_path has not (yet)
                 print_log("config file set", priority=3)
                 self.config_path = index_config_path + str(self.name) + file_format
         # reading from disk
-        with open(self.config_path, mode="r") as config_file:
-            if config_file:
-                # the order of the member variables MUST be the same of the save_on_disk function
-                local_name = str(config_file.readline())
-                if str(self.name) == local_name:
-                    print_log("index " + str(self.name) + " is about to be loaded", priority=2)
-                    self.skip_stemming = (config_file.readline() == "skip_stem")
-                    self.allow_stop_words = (config_file.readline() == "allow_sw")
-                    self.compression = (config_file.readline() == "compress")
+        if os.path.exists(self.config_path):
+            with open(self.config_path, mode="r") as config_file:
+                if config_file:
+                    # the order of the member variables MUST be the same of the save_on_disk function
+                    local_name = str(config_file.readline())
+                    if str(self.name) == local_name:
+                        print_log("index " + str(self.name) + " is about to be loaded", priority=2)
+                        self.skip_stemming = (config_file.readline() == "skip_stem")
+                        self.allow_stop_words = (config_file.readline() == "allow_sw")
+                        self.compression = (config_file.readline() == "compress")
 
-                    self.content_reinit(config_file.readline())
-                    self.topk = int(config_file.readline())
-                    self.algorithm = config_file.readline()
-                    self.scoring = config_file.readline()
-                    self.evaluation = config_file.readline()
+                        self.content_reinit(config_file.readline())
+                        self.topk = int(config_file.readline())
+                        self.algorithm = config_file.readline()
+                        self.scoring = config_file.readline()
+                        self.evaluation = config_file.readline()
 
-                    self.collection_statistics_path = config_file.readline()
-                    self.index_file_path = config_file.readline()
-                    self.lexicon_path = config_file.readline()
-                    print_log("index " + str(self.name) + " loaded successfully", priority=1)
+                        self.collection_statistics_path = config_file.readline()
+                        self.index_file_path = config_file.readline()
+                        self.lexicon_path = config_file.readline()
+                        print_log("index " + str(self.name) + " loaded successfully", priority=1)
+                    else:
+                        print_log("conflict loading " + str(self.name) + " from file named " + local_name, priority=0)
                 else:
-                    print_log("conflict loading " + str(self.name) + " from file named " + local_name, priority=0)
-            else:
-                # file not found
-                print_log("cannot find index config " + str(self.name), priority=0)
-                return
-        print_log("closing config file", priority=4)
+                    # file not found
+                    print_log("cannot find index config " + str(self.name), priority=0)
+                    return True
+            print_log("closing config file", priority=4)
+        else:
+            return False
 
     def content_to_str(self):
         # content is a list made of (x,y) couples, representing that each document between x and y are included in
@@ -205,6 +196,15 @@ class invertedIndex:
     def content_flush(self):
         # remove all docids marked as read
         self.content = []
+
+    def content_check(self, docid):
+        # check if docid is contained in the index
+        # @ param docid : id (row number of the original dataset)
+        for interval in self.content:
+            if interval[0] < docid < interval[1]:
+                return True
+        else:
+            return False
 
     def add_content_id(self, docid):
         # content is a list of couples, each couple is a pair <low,high> of docids that have already been processed
@@ -250,20 +250,23 @@ class invertedIndex:
         # MANDATORY: every chunk must be ordinated
         posting_buffer_sorted = sorted(posting_buffer, key=lambda x: x[0])
         chunk_name = index_folder_path + self.name + "/" + filename
-        print_log("Writing new posting file chunk to file. dumping chunk here: ", 4)
-        if verbosity_config >= 4:
-            print(posting_buffer_sorted)
-        with open(chunk_name, "w") as file:
-            for row in posting_buffer_sorted:
-                row_string = str(row[0]) + posting_separator
-                for pair in row[1:]:
-                    element = str(pair[0]) + docid_separator + str(pair[1])
-                    if pair == row[-1]:
-                        row_string += element
-                    else:
-                        row_string += element + element_separator
-                file.write(row_string + chunk_line_separator)
-        posting_buffer = []
+        try:
+            with open(chunk_name, "w") as file:
+                for row in posting_buffer_sorted:
+                    row_string = str(row[0]) + posting_separator
+                    for pair in row[1:]:
+                        element = str(pair[0]) + docid_separator + str(pair[1])
+                        if pair == row[-1]:
+                            row_string += element
+                        else:
+                            row_string += element + element_separator
+                    file.write(row_string + chunk_line_separator)
+            posting_buffer = []
+        except IOError:
+            print(IOError)
+            print_log("Writing new posting file chunk to file. dumping chunk here: ", 1)
+            if verbosity_config >= 4:
+                print(posting_buffer_sorted)
         return chunk_name
 
     def update_to_lexicon(self, filename):
@@ -272,21 +275,35 @@ class invertedIndex:
         global lexicon_buffer
         # lexicon_buffer is a list where each element have this structure:
         #     [token_id, token_count]
+        chunk_name = index_folder_path + self.name + "/" + filename
 
         # MANDATORY: every chunk must be ordinated
         lexicon_buffer_sorted = sorted(lexicon_buffer, key=lambda x: x[0])
-        chunk_name = index_folder_path + self.name + "/" + filename
-        print_log("Writing lexicon chunk chunk to file. dumping chunk here: ", 4)
-        if verbosity_config >= 4:
-            print(lexicon_buffer_sorted)
-        with open(chunk_name, "w") as file:
-            for row in lexicon_buffer_sorted:
-                file.write(str(row[0]) + element_separator + str(row[1]) + chunk_line_separator)
-        lexicon_buffer = []
+
+        try:
+            with open(chunk_name, "w") as file:
+                for row in lexicon_buffer_sorted:
+                    file.write(str(row[0]) + element_separator + str(row[1]) + chunk_line_separator)
+            lexicon_buffer = []
+        except IOError:
+            print(IOError)
+            print_log("Writing lexicon chunk chunk to file. dumping chunk here: ", 1)
+            if verbosity_config >= 4:
+                print(lexicon_buffer_sorted)
         return chunk_name
 
     def scan_dataset(self, limit_row_size=-1, delete_after_compression=False):
+        global lexicon_buffer
+        global posting_buffer
+        global posting_file_list
+        global lexicon_file_list
         print_log("starting dataset scan", priority=1)
+
+        lexicon_buffer = []  # memory buffer
+        posting_buffer = []  # memory buffer
+        posting_file_list = []  # list of file names
+        lexicon_file_list = []  # list of file names
+
         print_log("scan limited to " + str(limit_row_size) + " rows", priority=4)
         open_dataset(limit_row_size, self, add_document_to_index)
         print_log("dataset scan completed", priority=3)
@@ -297,6 +314,7 @@ class invertedIndex:
             if delete_after_compression:
                 print_log("deleted uncompressed index file", priority=1)
                 os.remove(self.index_file_path)
+        self.save_on_disk()
 
     def query(self, query_string):
         res = searchResult(self.topk)
@@ -320,9 +338,22 @@ class invertedIndex:
         return res
 
 
+def load_from_disk(name):
+    # function used to initialise a new invertedIndex by loading it from disk.
+    # @ param name: user is required to remember the name of the file on disk
+    index = InvertedIndex()
+    index.rename(name)
+    ok = index.reload_from_disk()
+    if ok:
+        return index
+    else:
+        print_log("CRITICAL ERROR: cannot load index from disk", 0)
+        return None
+
+
 def index_setup(name, stemming_flag, stop_words_flag, compression_flag, k, algorithm, scoring_f, eval_f):
     print_log("setup for new index", 4)
-    ind = invertedIndex()
+    ind = InvertedIndex()
     print_log("created index", 4)
     ind.rename(name)
     print_log("setting flags", 4)
@@ -347,7 +378,7 @@ def index_setup(name, stemming_flag, stop_words_flag, compression_flag, k, algor
 def add_posting_list(token_id, token_count, docid):
     # add new entries in posting list
     global posting_buffer
-    print_log("adding new posting list: " + str(token_id), priority=5)
+    # print_log("adding new posting list: " + str(token_id), priority=5)
     stats = [docid, token_count]
     found_token = False
     found_doc = False
@@ -365,7 +396,7 @@ def add_posting_list(token_id, token_count, docid):
     if not found_token:
         posting_buffer.append([token_id, stats])
     if len(posting_buffer) > index_chunk_size:
-        print_log("posting memory buffer is full", priority=3)
+        print_log("posting memory buffer is full", priority=4)
         return True  # chunk is big, time to write it on disk
     else:
         return False  # no need to write it on disk yet
@@ -376,7 +407,7 @@ def add_to_lexicon(token_id, token_count):
     # @ param token_id : token(string)
     # @ param token_count : frequency of the token
     global lexicon_buffer
-    print_log("adding word to lexicon: " + str(token_id), priority=5)
+    #  print_log("adding word to lexicon: " + str(token_id), priority=5)
     found = False
     for token in lexicon_buffer:
         if token[0] == token_id:
@@ -386,7 +417,7 @@ def add_to_lexicon(token_id, token_count):
     if not found:
         lexicon_buffer.append([token_id, token_count])
     if len(lexicon_buffer) > index_chunk_size:
-        print_log("lexicon memory buffer is full", priority=3)
+        print_log("lexicon memory buffer is full", priority=4)
         return True  # chunk is big, time to write it on disk
     else:
         return False  # no need to write it on disk yet
@@ -405,7 +436,7 @@ def merge_chunks(file_list, output_file_path, mode="", delete_after_merge=True):
         # cerco in ogni elemento di firstelemlist
         i = 0
         output_row = ""  # list of elements for the posting list
-                    # example of output row :: ["0|1" , "1|2"]
+        # example of output row :: ["0|1" , "1|2"]
         output_key = ""  # token as string
         # esamino il primo elemento di ogni file, cerco il minore e scrivo la sua posizione in next_index
         for element in first_element_list:
@@ -483,7 +514,7 @@ def add_document_to_index(index, args):
     if is_duplicate:
         print_log("duplicate document " + str(docid), priority=4)
         return
-    print_log("adding row " + str(docid) + "as document " + str(docno) + " to index " + str(index.name), priority=5)
+    print_log("adding row " + str(docid) + " as document " + str(docno) + " to index " + str(index.name), priority=5)
 
     tokens = preprocess_text(doctext, index.skip_stemming, index.allow_stop_words)
     token_counts = count_token_occurrences(tokens).items()
@@ -511,3 +542,11 @@ def add_document_to_index(index, args):
     # delete_after_merge=False per verificare struttura dei file di chunk
     merge_chunks(posting_file_list, index.index_file_path, mode="posting", delete_after_merge=False)
     merge_chunks(lexicon_file_list, index.lexicon_path, mode="lexicon", delete_after_merge=False)
+    '''
+     Possible improvement: disaster recovery
+     Calling the "save_on_disk" function after each update could be a good idea to save the progress in the scan_dataset procedure. 
+     if properly handled, it could be a way to split the execution flow in more instances, like a crash of the code or a 
+     multithreading environment. in order to make it work, it is necessary to remove the lists of file names, and make 
+     the "merge" function infer the files itself. it could work with os.listdir, making a regex on the naming pattern 
+     we have used to rebuild lexicon_file_list and posting_file_list.
+    '''

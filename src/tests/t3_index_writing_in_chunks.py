@@ -2,7 +2,7 @@ import time
 
 from nltk.corpus import stopwords
 
-from src.modules.invertedIndex import index_setup
+from src.modules.InvertedIndex import index_setup
 
 stop_words = set(stopwords.words('english'))
 punctuation_signs = []
@@ -22,5 +22,16 @@ def test_index(file_count, index_name):
     return tic, toc
 
 
-t1s, t1e = test_index(50, "t5")
+t1s, t1e = test_index(50, "t50")
 print("T5 created in " + str(t1e - t1s))
+# 11s
+# index file size: 15kB
+# lexicon filesize: 9kB
+# about 3 chunks (size: 250)
+
+t2s, t2e = test_index(1500, "t1500")
+print("T5 created in " + str(t2e - t2s))
+# 770s
+# index file size: 451kB
+# lexicon filesize: 110kB
+# about 150 chunks (size: 250)

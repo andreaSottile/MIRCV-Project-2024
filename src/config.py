@@ -37,7 +37,7 @@ k_returned_results_config = [10, 20]
 # options available for query processing
 query_processing_algorithm_config = ["conjunctive", "disjunctive"]
 # options available for scoring function
-scoring_function_config = ["BM11", "BM25", "TFIDF"]
+scoring_function_config = ["BM11", "BM15", "BM25", "TFIDF"]
 '''
 Query Execution. 
 Your program must execute ranked queries. Your program must
@@ -54,6 +54,18 @@ Your program must include an evaluation of the systems using a standard
 collection such as the TREC DL 2019 queries and TREC DL 2019 qrels, or the
 TREC DL 2020 queries and TREC DL 2020 qrels.
 '''
+
+"""
+STRING FORMAT CONFIG: list of useful variables to easily remember string separators
+"""
+file_format = ".txt"
+file_blank_tag = "missing"
+member_blank_tag = "not set"
+collection_separator = ","
+posting_separator = ":"
+element_separator = ";"
+docid_separator = "|"
+chunk_line_separator = " \n"
 
 """Debug Verbosity"""
 ''' 
@@ -87,7 +99,7 @@ If limit is zero, then all the rows are going to  be read (no limit)
 # 100000 rows -> 47 s
 
 # EDIT HERE
-limit_input_rows_config = 100
+limit_input_rows_config = 0
 
 '''
 CHUNK SIZE FOR INDEXING
@@ -95,4 +107,12 @@ instead of writing index files frequently, add them in memory and write only whe
 size is counted in number of read documents
 '''
 # EDIT HERE
-index_chunk_size = 20
+index_chunk_size = 250
+
+'''
+BM 25 PARAMETERS
+k_one in [1.2,2]
+B is usually 0.75
+'''
+BM_k_one = 1.2
+BM25_b = 0.75
