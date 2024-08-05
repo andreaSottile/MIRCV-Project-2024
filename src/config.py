@@ -114,5 +114,15 @@ BM 25 PARAMETERS
 k_one in [1.2,2]
 B is usually 0.75
 '''
+# EDIT HERE
 BM_k_one = 1.2
 BM25_b = 0.75
+
+
+'''
+QUERY PARAMETERS
+query_step_size_config : how many rows the query is supposed to read at once
+'''
+# EDIT HERE
+query_step_size_config = 500
+

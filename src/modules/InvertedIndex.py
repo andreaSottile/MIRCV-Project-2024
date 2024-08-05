@@ -1,4 +1,4 @@
-'''
+"""
 Inverted Index.
 You must create an inverted index structure, plus structures for the
 lexicon (to store the vocabulary terms and their information) and for the document
@@ -12,10 +12,10 @@ method to decrease the index size. Do not use standard compressors such as
 gzip for index compression. Ideally, your program should have a compile flag
 that allows you to use ASCII format during debugging and binary format for
 performance.
-'''
-from src.config import print_log, index_folder_path, index_config_path, index_chunk_size, verbosity_config, \
-    member_blank_tag, file_blank_tag, chunk_line_separator, element_separator, collection_separator, posting_separator, \
-    docid_separator
+"""
+import pandas as pd
+
+from src.config import *
 import os
 
 from src.modules.compression import compress_index
@@ -264,9 +264,8 @@ class InvertedIndex:
             posting_buffer = []
         except IOError:
             print(IOError)
-            print_log("Writing new posting file chunk to file. dumping chunk here: ", 1)
-            if verbosity_config >= 4:
-                print(posting_buffer_sorted)
+            print_log("Writing new posting file chunk to file. dumping chunk here: ", 5)
+            print_log(posting_buffer_sorted, 5)
         return chunk_name
 
     def update_to_lexicon(self, filename):
@@ -287,9 +286,8 @@ class InvertedIndex:
             lexicon_buffer = []
         except IOError:
             print(IOError)
-            print_log("Writing lexicon chunk chunk to file. dumping chunk here: ", 1)
-            if verbosity_config >= 4:
-                print(lexicon_buffer_sorted)
+            print_log("Writing lexicon chunk chunk to file. dumping chunk here: ", 4)
+            print_log(lexicon_buffer_sorted, 4)
         return chunk_name
 
     def scan_dataset(self, limit_row_size=-1, delete_after_compression=False):
@@ -315,27 +313,6 @@ class InvertedIndex:
                 print_log("deleted uncompressed index file", priority=1)
                 os.remove(self.index_file_path)
         self.save_on_disk()
-
-    def query(self, query_string):
-        res = searchResult(self.topk)
-        # TODO
-        if not self.is_ready():
-            print_log("CRITICAL ERROR: query on uninitialized index", priority=0)
-
-        # TODO prepare query_string
-
-        if self.compression:
-            # TODO compressed read
-            pass
-        else:
-            # TODO uncompressed read
-            pass
-
-        # TODO ranking
-        # usare res.append_result(item,score)
-
-        # TODO: return best results
-        return res
 
 
 def load_from_disk(name):
@@ -529,17 +506,15 @@ def add_document_to_index(index, args):
             new_chunk_post = index.update_posting_list("chunk_posting_" + str(len(posting_file_list)) + file_format)
             posting_file_list.append(new_chunk_post)
             print_log("chunks created: ", 5)
-            if verbosity_config >= 5:
-                print(posting_file_list)
-        # update lexicon at each new word
+            print_log(posting_file_list, 5)
+            # update lexicon at each new word
         full = add_to_lexicon(token_id, token_count)
         if full:
             new_chunk_lex = index.update_to_lexicon("chunk_lexicon_" + str(len(lexicon_file_list)) + file_format)
             lexicon_file_list.append(new_chunk_lex)
             print_log("chunks created: ", 5)
-            if verbosity_config >= 5:
-                print(lexicon_file_list)
-    # delete_after_merge=False per verificare struttura dei file di chunk
+            print_log(lexicon_file_list, 5)
+            # delete_after_merge=False per verificare struttura dei file di chunk
     merge_chunks(posting_file_list, index.index_file_path, mode="posting", delete_after_merge=False)
     merge_chunks(lexicon_file_list, index.lexicon_path, mode="lexicon", delete_after_merge=False)
     '''
