@@ -22,6 +22,7 @@ from src.modules.compression import compress_index
 from src.modules.documentProcessing import open_dataset
 from src.modules.preprocessing import preprocess_text, count_token_occurrences
 from src.modules.searchResult import searchResult
+from src.modules.utils import readline_with_strip
 
 lexicon_buffer = []  # memory buffer
 posting_buffer = []  # memory buffer
@@ -86,7 +87,6 @@ class InvertedIndex:
             self.config_path = file_blank_tag
 
     def save_on_disk(self):
-        global file_format
         # index config and options are saved on disk, generating a filename based on its name
         if self.name == member_blank_tag:
             print_log("cannot save index config without a name", priority=2)
@@ -144,22 +144,22 @@ class InvertedIndex:
             with open(self.config_path, mode="r") as config_file:
                 if config_file:
                     # the order of the member variables MUST be the same of the save_on_disk function
-                    local_name = str(config_file.readline())
+                    local_name = readline_with_strip(config_file)
                     if str(self.name) == local_name:
                         print_log("index " + str(self.name) + " is about to be loaded", priority=2)
-                        self.skip_stemming = (config_file.readline() == "skip_stem")
-                        self.allow_stop_words = (config_file.readline() == "allow_sw")
-                        self.compression = (config_file.readline() == "compress")
+                        self.skip_stemming = (readline_with_strip(config_file) == "skip_stem")
+                        self.allow_stop_words = (readline_with_strip(config_file) == "allow_sw")
+                        self.compression = (readline_with_strip(config_file) == "compress")
 
-                        self.content_reinit(config_file.readline())
-                        self.topk = int(config_file.readline())
-                        self.algorithm = config_file.readline()
-                        self.scoring = config_file.readline()
-                        self.evaluation = config_file.readline()
+                        self.content_reinit(readline_with_strip(config_file))
+                        self.topk = int(readline_with_strip(config_file))
+                        self.algorithm = readline_with_strip(config_file)
+                        self.scoring = readline_with_strip(config_file)
+                        self.evaluation = readline_with_strip(config_file)
 
-                        self.collection_statistics_path = config_file.readline()
-                        self.index_file_path = config_file.readline()
-                        self.lexicon_path = config_file.readline()
+                        self.collection_statistics_path = readline_with_strip(config_file)
+                        self.index_file_path = readline_with_strip(config_file)
+                        self.lexicon_path = readline_with_strip(config_file)
                         print_log("index " + str(self.name) + " loaded successfully", priority=1)
                     else:
                         print_log("conflict loading " + str(self.name) + " from file named " + local_name, priority=0)
@@ -168,6 +168,7 @@ class InvertedIndex:
                     print_log("cannot find index config " + str(self.name), priority=0)
                     return True
             print_log("closing config file", priority=4)
+            return True
         else:
             return False
 
@@ -201,7 +202,7 @@ class InvertedIndex:
         # check if docid is contained in the index
         # @ param docid : id (row number of the original dataset)
         for interval in self.content:
-            if interval[0] < docid < interval[1]:
+            if int(interval[0]) < docid < int(interval[1]):
                 return True
         else:
             return False
@@ -324,7 +325,7 @@ def load_from_disk(name):
     if ok:
         return index
     else:
-        print_log("CRITICAL ERROR: cannot load index from disk", 0)
+        print_log("cannot load index from disk: Index not found on disk", 1)
         return None
 
 

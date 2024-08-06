@@ -20,8 +20,9 @@ from src.modules.preprocessing import preprocess_text
 
 def get_top_k(k, results):
     # rearrange a list of QueryResult and cut it to k elements
-    print_log("ordering the results list", 4)
+    print_log("Results list:", 4)
     print_log(results, 4)
+    print_log("ordering the results list", 4)
     result_list = []
     for key, score in results.items():
         result_list.append((key, score))
@@ -42,15 +43,25 @@ class QueryHandler:
         # file stats.txt: doc_id,doc_no,doc_length
         self.doc_lengths = 0  # read from stats.txt
         self.doc_ids = 0  # read from stats.txt
-        self.num_docs = 1  # len (stats.txt)
-        self.doc_len_average = 1
-        # TODO : calcolare il num_docs
-
-        # TODO : calcolare il doc_len_average
+        self.num_docs, self.doc_len_average = self.compute_docs_stats()  # len (stats.txt)
 
     def prepare_query(self, query_raw):
         return preprocess_query_string(query_raw, stem_flag=self.index.skip_stemming,
                                        stop_flag=self.index.allow_stop_words)
+
+    def compute_docs_stats(self):  # len (stats.txt)
+        total_doc = 0
+        total_length_doc = 0
+        with open(self.index.collection_statistics_path, 'rb') as f:
+            while (True):
+                content = f.readline()
+                if len(content)==0:
+                    break
+                content= content.decode("utf-8").strip().split(collection_separator)
+                total_length_doc += int(content[2])
+                total_doc += 1
+        avg_length = total_length_doc / total_doc
+        return total_doc, avg_length
 
     def query(self, query_string):
         print_log("received query", 2)
