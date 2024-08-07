@@ -55,4 +55,4 @@ for query_processing_algorithm in query_processing_algorithm_config:
         config = [50, query_processing_algorithm, scoring_function, 6, True, True]
         test_index(query_string_test, "indt_" + query_processing_algorithm + "_" + scoring_function, config)
 
-#test_index(query_string_test, "indt4", config)
+test_index(query_string_test, "indt4", config)
