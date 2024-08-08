@@ -13,15 +13,12 @@ gzip for index compression. Ideally, your program should have a compile flag
 that allows you to use ASCII format during debugging and binary format for
 performance.
 """
-import pandas as pd
-
 from src.config import *
 import os
 
 from src.modules.compression import compress_index
 from src.modules.documentProcessing import open_dataset
 from src.modules.preprocessing import preprocess_text, count_token_occurrences
-from src.modules.searchResult import searchResult
 from src.modules.utils import readline_with_strip
 
 lexicon_buffer = []  # memory buffer
@@ -54,6 +51,9 @@ class InvertedIndex:
         self.index_file_path = file_blank_tag
         self.lexicon_path = file_blank_tag
         self.config_path = file_blank_tag
+        self.num_doc = 0
+        self.index_len = 0
+        self.lexicon_len = 0
         print_log("created new index", priority=2)
 
     def rename(self, name):
@@ -124,10 +124,14 @@ class InvertedIndex:
             config_file.write(self.index_file_path + chunk_line_separator)
             config_file.write(self.lexicon_path + chunk_line_separator)
 
+            config_file.write(str(self.num_doc) + chunk_line_separator)
+            config_file.write(str(self.index_len) + chunk_line_separator)
+            config_file.write(str(self.lexicon_len) + chunk_line_separator)
             print_log("index config saved successfully", priority=3)
 
     def reload_from_disk(self):
-        # function called to load a previously created index, by reading a config file
+        # function called to load a previously created index, by reading a config file from HD
+        # returns True if the loading was successful
         print_log("loading index config file", priority=3)
         if self.config_path == file_blank_tag:
             # config file path not set yet
@@ -160,16 +164,22 @@ class InvertedIndex:
                         self.collection_statistics_path = readline_with_strip(config_file)
                         self.index_file_path = readline_with_strip(config_file)
                         self.lexicon_path = readline_with_strip(config_file)
+
+                        self.num_doc = int(readline_with_strip(config_file))
+                        self.index_len = int(readline_with_strip(config_file))
+                        self.lexicon_len = int(readline_with_strip(config_file))
                         print_log("index " + str(self.name) + " loaded successfully", priority=1)
                     else:
+                        # this should never happen
                         print_log("conflict loading " + str(self.name) + " from file named " + local_name, priority=0)
                 else:
                     # file not found
-                    print_log("cannot find index config " + str(self.name), priority=0)
-                    return True
+                    print_log("ERROR: cannot find index config " + str(self.name), priority=0)
+                    return False
             print_log("closing config file", priority=4)
             return True
         else:
+            print_log("ERROR: cannot find index config " + str(self.name), priority=0)
             return False
 
     def content_to_str(self):
@@ -240,6 +250,7 @@ class InvertedIndex:
         with open(self.collection_statistics_path, mode="a") as collection:
             collection.write(str(docid) + collection_separator + str(docno) + collection_separator + str(
                 stats) + chunk_line_separator)
+            self.num_doc += 1
 
     def update_posting_list(self, filename):
         # write a chunk of posting lists to disk
@@ -291,7 +302,7 @@ class InvertedIndex:
             print_log(lexicon_buffer_sorted, 4)
         return chunk_name
 
-    def scan_dataset(self, limit_row_size=-1, delete_after_compression=False):
+    def scan_dataset(self, limit_row_size=-1, delete_chunks=False, delete_after_compression=False):
         global lexicon_buffer
         global posting_buffer
         global posting_file_list
@@ -306,6 +317,13 @@ class InvertedIndex:
         print_log("scan limited to " + str(limit_row_size) + " rows", priority=4)
         open_dataset(limit_row_size, self, add_document_to_index)
         print_log("dataset scan completed", priority=3)
+
+        lines = merge_chunks(posting_file_list, self.index_file_path, mode="posting", delete_after_merge=delete_chunks)
+        self.index_len += lines
+        lines = merge_chunks(lexicon_file_list, self.lexicon_path, mode="lexicon", delete_after_merge=delete_chunks)
+        self.lexicon_len += lines
+
+        print_log("merged all chunks", priority=1)
         if self.compression:
             print_log("compressing index file", priority=1)
             compress_index(self.name, self.index_file_path, self.lexicon_path)
@@ -321,8 +339,7 @@ def load_from_disk(name):
     # @ param name: user is required to remember the name of the file on disk
     index = InvertedIndex()
     index.rename(name)
-    ok = index.reload_from_disk()
-    if ok:
+    if index.reload_from_disk():
         return index
     else:
         print_log("cannot load index from disk: Index not found on disk", 1)
@@ -402,12 +419,18 @@ def add_to_lexicon(token_id, token_count):
 
 
 def merge_chunks(file_list, output_file_path, mode="", delete_after_merge=True):
+    written_lines = 0
     reader_list = []  # list of pointers to files
     first_element_list = []  # list of the next (lowest) element taken from each file
     for file in file_list:
         reader = open(file, "r+")
         reader_list.append(reader)
         first_element_list.append(reader.readline())
+
+    if os.path.exists(output_file_path):
+        # delete the file if any previous duplicate was present
+        os.remove(output_file_path)
+
     output_file = open(output_file_path, "w+")
     while True:
         next_chunk_index = []
@@ -461,20 +484,27 @@ def merge_chunks(file_list, output_file_path, mode="", delete_after_merge=True):
                     if e != output_row[-1]:
                         line += element_separator
                 output_file.write(str(output_key) + posting_separator + line.replace("\n", "") + chunk_line_separator)
+                written_lines += 1
             elif mode == "lexicon":
                 output_file.write(output_key + element_separator + str(output_row) + chunk_line_separator)
+                written_lines += 1
         else:
             # se tutte le liste sono vuote, ho finito
             break
+
+    print_log("Chunks merge finished for "+str(mode), 1)
     for file in reader_list:
         file.close()
     if delete_after_merge:
+        print_log("Deleting chunks after merge", 2)
         for file_name in file_list:
             os.remove(file_name)
     output_file.close()
+    return written_lines
 
 
 def add_document_to_index(index, args):
+    # this function is called for each document (row) in the collection
     global posting_file_list  # list of file names
     global lexicon_file_list  # list of file names
     if len(args) != 3:
@@ -516,8 +546,7 @@ def add_document_to_index(index, args):
             print_log("chunks created: ", 5)
             print_log(lexicon_file_list, 5)
             # delete_after_merge=False per verificare struttura dei file di chunk
-    merge_chunks(posting_file_list, index.index_file_path, mode="posting", delete_after_merge=False)
-    merge_chunks(lexicon_file_list, index.lexicon_path, mode="lexicon", delete_after_merge=False)
+
     '''
      Possible improvement: disaster recovery
      Calling the "save_on_disk" function after each update could be a good idea to save the progress in the scan_dataset procedure. 

@@ -43,25 +43,24 @@ class QueryHandler:
         # file stats.txt: doc_id,doc_no,doc_length
         self.doc_lengths = 0  # read from stats.txt
         self.doc_ids = 0  # read from stats.txt
-        self.num_docs, self.doc_len_average = self.compute_docs_stats()  # len (stats.txt)
+        self.num_docs = index_file.num_doc
+        self.doc_len_average = self.compute_docs_average(index_file.num_doc)  # len (stats.txt)
 
     def prepare_query(self, query_raw):
         return preprocess_query_string(query_raw, stem_flag=self.index.skip_stemming,
                                        stop_flag=self.index.allow_stop_words)
 
-    def compute_docs_stats(self):  # len (stats.txt)
-        total_doc = 0
+    def compute_docs_average(self, docs_count):  # len (stats.txt)
         total_length_doc = 0
         with open(self.index.collection_statistics_path, 'rb') as f:
-            while (True):
+            while True:
                 content = f.readline()
-                if len(content)==0:
+                if len(content) == 0:
                     break
-                content= content.decode("utf-8").strip().split(collection_separator)
+                content = content.decode("utf-8").strip().split(collection_separator)
                 total_length_doc += int(content[2])
-                total_doc += 1
-        avg_length = total_length_doc / total_doc
-        return total_doc, avg_length
+        avg_length = total_length_doc / docs_count
+        return avg_length
 
     def query(self, query_string):
         print_log("received query", 2)
@@ -82,13 +81,13 @@ class QueryHandler:
         return ranked_list[0:self.index.topk]
 
     def fetch_posting_lists(self, query_terms):
-        res = search_in_file(self.index.index_file_path, query_terms, posting_separator)
+        res = search_in_file(self.index.index_file_path, self.index.index_len, query_terms, posting_separator)
         return res
 
     def fetch_doc_size(self, key):
         #    expected row from the collection statistics file:
         #    docid + collection_separator + docno + collection_separator + size + chunk_line_separator
-        res = search_in_file(self.index.collection_statistics_path, [key], collection_separator)
+        res = search_in_file(self.index.collection_statistics_path, self.index.num_doc, [key], collection_separator)
         # res is a string like "docid,docno,doc_size"
         size = res[0].split(collection_separator)[2]
         return int(size)
@@ -178,9 +177,10 @@ def make_posting_candidates(raw_posting_lists):
     return res
 
 
-def search_in_file(file_path, query_terms, key_delimiter):
+def search_in_file(file_path, file_size, query_terms, key_delimiter):
     # search some query_terms inside a file
     # returns a list of posting lists
+    # TODO : Pruning
     if not os.path.exists(file_path):
         print_log("Calling Search on unknown path", 0)
         print_log(file_path, 0)
@@ -192,20 +192,23 @@ def search_in_file(file_path, query_terms, key_delimiter):
         print_log("opening file at line " + str(row_id), 5)
         file_pointer.seek(row_id)
         file_pointer.readline()  # Skip partial line
-        return file_pointer.tell(), file_pointer.readline().decode()
+        return file_pointer.readline().decode()
 
-    def binary_search_file(file_pointer, target_key):
+    def binary_search_file(file_pointer, target_key): #  TODO
+        # at the first execution, left and right are the first and the last line
+        left, right = 0, file_size
         print_log("binary searching " + str(target_key), 5)
-        left, right = 0, file_pointer.seek(0, 2)
-        while left < right:
+        while str(left) < str(right):
             mid = (left + right) // 2
-            row_id, value = read_line_at(file_pointer, mid)
+            value = read_line_at(file_pointer, mid)
             if not value:
+                # this should never happen, since we know there are no blank lines
+                print_log("value not found at line "+str(mid))
                 right = mid
                 continue
             current_key = value.split(key_delimiter)[0]
             if current_key < target_key:
-                left = row_id
+                left = mid
             else:
                 right = mid
         return left
