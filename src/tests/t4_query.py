@@ -43,9 +43,9 @@ def test_index(query_string, index_name, flags):
 
 
 # file_count, method, scoring, k, skip_stemming, allow stop words
-#disjunctive test
+# disjunctive test
 config = [50, query_processing_algorithm_config[1], scoring_function_config[0], 4, True, True]
-#disjunctive test, top6
+# disjunctive test, top6
 config = [50, query_processing_algorithm_config[0], scoring_function_config[0], 6, True, True]
 
 query_string_test = "communities between"
