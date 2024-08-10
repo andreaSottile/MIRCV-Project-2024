@@ -1,7 +1,7 @@
 from src.config import *
 import os
 
-file_target = "D:\Repositories\mircv\dataset\indexdefault_index\index.txt"
+file_target = r"C:\Users\andre\Desktop\AIDE\mircv\indexdefault_index\index.txt"
 
 # NEW PARAMETER
 search_chunk_size_config = 10000  # char size for a search chunk
@@ -14,7 +14,7 @@ def test_search(words_list, algorithm):
 
     delimiter = ":"
 
-    print(" --  Searching with "+algorithm+"  -- ")
+    print(" --  Searching with " + algorithm + "  -- ")
 
     print(words_list)
 
@@ -26,7 +26,7 @@ def test_search(words_list, algorithm):
 
 def get_last_line(file_pointer):
     file_pointer.seek(0, 2)  # 2 means SEEK_END
-    end_pos = file_pointer.tell()  # Get the position of the end of the file
+    end_pos = file_pointer.tell()  # Get the position of the end of the file ( tell() method returns the current file position in a file stream)
     # Start from the end of the file
     file_pointer.seek(-2, 2)  # last byte is a \n, so move it back by 2 chars
 
@@ -106,7 +106,7 @@ def ternary_search(file_pointer, start_position, target_key, delimiter, end_posi
     # @ param key_delimiter : char separating the key-word from the rest of the line
     # @ returns : pair position_in_file,line if success. -1,"" if failure
 
-    # ternary search: split the interval into 3, and keep reducing the 3 segments in size untill finding the element
+    # ternary search: split the interval into 3, and keep reducing the 3 segments in size until finding the element
     #  low   <  checkpoint_1  <  checkpoint_2 < high
     low_pos, low_row = next_GEQ_line(file_pointer, start_position)
     low_key = get_row_id(low_row, delimiter)
@@ -123,8 +123,8 @@ def ternary_search(file_pointer, start_position, target_key, delimiter, end_posi
     elif target_key == high_key:
         return high_pos, high_row
     else:
-        print_log("key is not in the extremes", 5)
-
+        print_log("key is not one of the extremes", 5)
+    first_time = 0
     previous_high = previous_low = -1
     while True:
         # safety check: key is out of boundaries
@@ -137,7 +137,6 @@ def ternary_search(file_pointer, start_position, target_key, delimiter, end_posi
 
         pivot_1_pos, pivot_1_row = next_GEQ_line(file_pointer, cut1)
         pivot_1_key = get_row_id(pivot_1_row, delimiter)
-
         # check lower border
         while low_key >= pivot_1_key:
             print_log("gap too low, repositioning pivot 1", 5)
@@ -148,15 +147,20 @@ def ternary_search(file_pointer, start_position, target_key, delimiter, end_posi
 
         # check lower interval content (lower border has already been checked)
         if low_key < target_key <= pivot_1_key:
-            # print_log("lower interval is the correct one", 5)
+            print_log("lower interval is the correct one", 5)
             print_log(str(low_key) + "<" + str(target_key) + "<" + str(pivot_1_key), 6)
             # check if i found the word i need
             if target_key == pivot_1_key:
                 return pivot_1_pos, pivot_1_row
 
             if previous_low == low_pos and previous_high == pivot_1_pos:
-                # avoid infinite loop if the term is not present
-                break
+                if (first_time > 0):
+                    first_time = 0
+                    # avoid infinite loop if the term is not present
+                    break
+                pivot_1_pos, pivot_1_row = next_GEQ_line(file_pointer, low_pos)
+                pivot_1_key = get_row_id(pivot_1_row, delimiter)
+                first_time += 1
             else:
                 previous_high = pivot_1_pos
                 previous_low = low_pos
@@ -184,14 +188,20 @@ def ternary_search(file_pointer, start_position, target_key, delimiter, end_posi
 
         # check middle interval content (lower border has already been checked)
         if pivot_1_key < target_key <= pivot_2_key:
-            # print_log("middle interval is the correct one", 5)
+            print_log("middle interval is the correct one", 5)
             print_log(str(pivot_1_key) + "<" + str(target_key) + "<" + str(pivot_2_key), 6)
             if target_key == pivot_2_key:
                 return pivot_2_pos, pivot_2_row
 
             if previous_low == pivot_1_pos and previous_high == pivot_2_pos:
-                # avoid infinite loop if the term is not present
-                break
+                if (first_time > 0):
+                    first_time = 0
+                    # avoid infinite loop if the term is not present
+                    break
+                pivot_2_pos, pivot_2_row = next_GEQ_line(file_pointer, pivot_1_pos)
+                pivot_2_key = get_row_id(pivot_2_row, delimiter)
+                first_time += 1
+
             else:
                 previous_high = pivot_2_pos
                 previous_low = pivot_1_pos
@@ -207,7 +217,7 @@ def ternary_search(file_pointer, start_position, target_key, delimiter, end_posi
             print_log("upper interval has negative size, nothing found", 5)
             break
 
-        # print_log("upper interval is the correct one", 5)
+        print_log("upper interval is the correct one", 5)
         print_log(str(pivot_2_key) + "<" + str(target_key) + "<" + str(high_key), 6)
 
         if previous_low == pivot_2_pos and previous_high == high_pos:
@@ -277,7 +287,7 @@ print("testing ternary search")
 print("test query: between companies")
 test_search(["between", "companies"], search_algorithms[0])
 print("test query: third figur")
-test_search(["third", "figur"], search_algorithms[0])
+test_search(["final" ,"third", "figur"], search_algorithms[0])
 
 print("testing skipping search")
 print("test query: between companies")
