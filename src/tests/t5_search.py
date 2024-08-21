@@ -91,6 +91,7 @@ def set_search_interval(file_pointer, start, key, key_delimiter, step_size):
     print_log(top_row, 8)
     skipped = 0
     while key > get_row_id(top_row, key_delimiter):
+        print_log("Reading between " + str(low) + " and " + str(high), 5)
         low = high
         high, top_row = next_GEQ_line(file_pointer, low + step_size)
         skipped += 1

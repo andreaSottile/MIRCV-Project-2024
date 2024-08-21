@@ -117,7 +117,7 @@ class QueryHandler:
             else:
                 print_log("CRITICAL ERROR: query algorithm not set", 0)
                 return []
-        # reutrns a list of relevant docids
+        # returns a list of relevant docids
         print_log("relevant documents list", 2)
         print_log(candidates, 2)
         return sorted(list(candidates), key=lambda x: int(x))
