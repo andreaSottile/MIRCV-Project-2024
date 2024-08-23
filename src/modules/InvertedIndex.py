@@ -16,16 +16,17 @@ performance.
 from src.config import *
 import os
 
-from src.modules.compression import compress_index
+from src.modules.compression import compress_index, to_unary, to_gamma, bit_stream_to_bytes
 from src.modules.documentProcessing import open_dataset
 from src.modules.preprocessing import preprocess_text, count_token_occurrences
 from src.modules.utils import readline_with_strip
 
-#lexicon_buffer = []  # memory buffer
+# lexicon_buffer = []  # memory buffer
 posting_buffer = []  # memory buffer
 posting_file_list = []  # list of file names
-#lexicon_file_list = []  # list of file names
 
+
+# lexicon_file_list = []  # list of file names
 
 
 # REMINDER STRUTTURA POSTING
@@ -306,24 +307,25 @@ class InvertedIndex:
     '''
 
     def scan_dataset(self, limit_row_size=-1, delete_chunks=False, delete_after_compression=False):
-        #global lexicon_buffer
+        # global lexicon_buffer
         global posting_buffer
         global posting_file_list
-        #global lexicon_file_list
+        # global lexicon_file_list
         print_log("starting dataset scan", priority=1)
 
-        #lexicon_buffer = []  # memory buffer
+        # lexicon_buffer = []  # memory buffer
         posting_buffer = []  # memory buffer
         posting_file_list = []  # list of file names
-        #lexicon_file_list = []  # list of file names
+        # lexicon_file_list = []  # list of file names
 
         print_log("scan limited to " + str(limit_row_size) + " rows", priority=4)
         open_dataset(limit_row_size, self, add_document_to_index)
         print_log("dataset scan completed", priority=3)
 
-        lines = merge_chunks(posting_file_list, self.index_file_path, self.lexicon_path, delete_after_merge=delete_chunks)
+        lines = merge_chunks(posting_file_list, self.index_file_path, self.lexicon_path,
+                             delete_after_merge=delete_chunks)
         self.index_len += lines
-#        lines = merge_chunks(lexicon_file_list, self.lexicon_path, self.lexicon_path, mode="lexicon", delete_after_merge=delete_chunks)
+        #        lines = merge_chunks(lexicon_file_list, self.lexicon_path, self.lexicon_path, mode="lexicon", delete_after_merge=delete_chunks)
         self.lexicon_len += lines
         print_log("merged all chunks", priority=1)
         if self.compression:
@@ -336,20 +338,43 @@ class InvertedIndex:
         self.save_on_disk()
 
 
-def make_posting_list(token_id, list_doc_id, list_freq):
-    posting_string = ""
-    for doc in list_doc_id:
-        posting_string = posting_string + doc + ","
-    posting_string = posting_string + " "
-    for freq in list_freq:
-        posting_string = posting_string + freq + ","
-    return posting_string
+def make_posting_list(token_id, list_doc_id, list_freq, encoding_type="unary"):
+    # Step 1: Encode the number of doc IDs
+    num_docs = len(list_doc_id)
+    if encoding_type == "unary":
+        encoded_num_docs = to_unary(num_docs)
+    elif encoding_type == "gamma":
+        encoded_num_docs = to_gamma(num_docs)
+    else:
+        raise ValueError(f"Unsupported encoding type: {encoding_type}")
+    # Step 2: Encode the doc IDs using gap encoding
+    gap_list = []
+    previous_doc_id = 0
+    for doc_id in list_doc_id:
+        gap_list.append(int(doc_id) - previous_doc_id)
+        previous_doc_id = int(doc_id)
+
+    if encoding_type == "unary":
+        encoded_gap_list = [to_unary(gap) for gap in gap_list]
+        encoded_freq_list = [to_unary(int(freq)) for freq in list_freq]
+    elif encoding_type == "gamma":
+        encoded_gap_list = [to_gamma(gap) for gap in gap_list]
+        encoded_freq_list = [to_gamma(int(freq)) for freq in list_freq]
+
+    # Combine the bit streams: number of doc IDs, doc IDs, and frequencies
+    bit_stream = encoded_num_docs + ''.join(encoded_gap_list) + ''.join(encoded_freq_list)
+
+    # Convert the bit stream into bytes
+    compressed_bytes = bit_stream_to_bytes(bit_stream)
+    return compressed_bytes
+
 
 def read_posting_string(posting_string):
-    lists= posting_string.split(' ')
-    doc_list= lists[0].split(',')
+    lists = posting_string.split(' ')
+    doc_list = lists[0].split(',')
     freq_list = lists[1].split(',')
     return doc_list, freq_list
+
 
 def load_from_disk(name):
     # function used to initialise a new invertedIndex by loading it from disk.
@@ -412,6 +437,7 @@ def add_posting_list(token_id, token_count, docid):
         return True  # chunk is big, time to write it on disk
     else:
         return False  # no need to write it on disk yet
+
 
 '''
 def add_to_lexicon(token_id, token_count):
@@ -525,11 +551,13 @@ def merge_chunks(file_list, output_file_path, mode="", delete_after_merge=True):
     output_file.close()
     return written_lines
 '''
-def merge_chunks(file_list, index_file_path,lexicon_file_path, delete_after_merge=True):
+
+
+def merge_chunks(file_list, index_file_path, lexicon_file_path, delete_after_merge=True):
     written_lines = 0
     reader_list = []  # list of pointers to files
-    doc_list=[]
-    occurrence_list=[]
+    doc_list = []
+    occurrence_list = []
     first_element_list = []  # list of the next (lowest) element taken from each file
     for file in file_list:
         reader = open(file, "r+")
@@ -582,20 +610,22 @@ def merge_chunks(file_list, index_file_path,lexicon_file_path, delete_after_merg
                     first_element_list[index] = "empty"
             # lo scrivo nel file output
             line = ""
-            doc_list=[]
-            occurrence_list=[]
+            doc_list = []
+            occurrence_list = []
             for e in output_row:
                 elem = e.split("|")
-                #line += e
+                # line += e
                 doc_list.append(elem[0])
                 occurrence_list.append(elem[1])
-                #if e != output_row[-1]:
+                # if e != output_row[-1]:
                 #    line += element_separator
-            #output_file.write(str(output_key) + posting_separator + line.replace("\n", "") + chunk_line_separator)
+            # output_file.write(str(output_key) + posting_separator + line.replace("\n", "") + chunk_line_separator)
             posting_offset = index_file.tell()
-            index_file.write(make_posting_list(output_key,doc_list, occurrence_list) + chunk_line_separator)
+            index_file.write(make_posting_list(output_key, doc_list, occurrence_list, encoding_type="gamma"))
+
             written_lines += 1
-            lexicon_file.write(output_key + element_separator + str(len(doc_list)) + element_separator + str(posting_offset) +  chunk_line_separator)
+            lexicon_file.write(output_key + element_separator + str(len(doc_list)) + element_separator + str(
+                posting_offset) + chunk_line_separator)
             written_lines += 1
         else:
             # se tutte le liste sono vuote, ho finito
@@ -616,7 +646,7 @@ def merge_chunks(file_list, index_file_path,lexicon_file_path, delete_after_merg
 def add_document_to_index(index, args):
     # this function is called for each document (row) in the collection
     global posting_file_list  # list of file names
-    #global lexicon_file_list  # list of file names
+    # global lexicon_file_list  # list of file names
     if len(args) != 3:
         print_log("CRITICAL ERROR: missing arguments to add document to index : " + str(args), 0)
         return
@@ -649,13 +679,13 @@ def add_document_to_index(index, args):
             print_log("chunks created: ", 5)
             print_log(posting_file_list, 5)
             # update lexicon at each new word
-        #full = add_to_lexicon(token_id, token_count)
-        #if full:
+        # full = add_to_lexicon(token_id, token_count)
+        # if full:
         #    new_chunk_lex = index.update_to_lexicon("chunk_lexicon_" + str(len(lexicon_file_list)) + file_format)
         #    lexicon_file_list.append(new_chunk_lex)
         #    print_log("chunks created: ", 5)
         #    print_log(lexicon_file_list, 5)
-            # delete_after_merge=False per verificare struttura dei file di chunk
+        # delete_after_merge=False per verificare struttura dei file di chunk
 
     '''
      Possible improvement: disaster recovery
