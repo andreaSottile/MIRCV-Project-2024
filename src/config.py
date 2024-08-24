@@ -5,11 +5,13 @@ VARIABLES TAGGED WITH "EDIT HERE" REQUIRE MANUAL CONFIGURATION ON EACH MACHINE
 ''' LOCAL PATHS '''
 # path lorenzo
 # EDIT HERE
-full_collection_compressed = "D:/Repositories/mircv/dataset/collection.tar.gz"
+#full_collection_compressed = "D:/Repositories/mircv/dataset/collection.tar.gz"
+full_collection_compressed = "/Users/gianluca.cometa/Documents/mircv_dataset/collection.tar.gz"
 # EDIT HERE
-test_collection_uncompressed = "D:/Repositories/mircv/dataset/test.tsv"
+#test_collection_uncompressed = "D:/Repositories/mircv/dataset/test.tsv"
 # EDIT HERE
-full_collection_uncompressed = "D:/Repositories/mircv/dataset/collection.tsv"
+#full_collection_uncompressed = "D:/Repositories/mircv/dataset/collection.tsv"
+full_collection_uncompressed = "/Users/gianluca.cometa/Documents/mircv_dataset/collection.tsv"
 
 '''collection_path : this is the LOCAL path to the dataset.'''
 # EDIT HERE
@@ -17,9 +19,9 @@ collection_path_config = full_collection_compressed
 
 '''index folder: this folder is going to contain all the files to work with inverted indexes'''
 # EDIT HERE
-index_config_path = "D:/Repositories/mircv/dataset/index_info_"  # file name is going to be added at the end
+index_config_path = "/Users/gianluca.cometa/Documents/mircv_dataset/index_info_"  # file name is going to be added at the end
 # EDIT HERE
-index_folder_path = "D:/Repositories/mircv/dataset/index"  # folder is going to contain several files for each index
+index_folder_path = "/Users/gianluca.cometa/Documents/mircv_dataset/index"  # folder is going to contain several files for each index
 
 '''
 Dataset Specification. You must use the MSMARCO Passages collection1 available on

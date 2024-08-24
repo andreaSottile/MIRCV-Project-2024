@@ -337,12 +337,14 @@ class InvertedIndex:
                 os.remove(self.index_file_path)
         self.save_on_disk()
 
-
+#token_id not used check
 def make_posting_list(token_id, list_doc_id, list_freq, encoding_type="unary"):
     # Step 1: Encode the number of doc IDs
     num_docs = len(list_doc_id)
+    #print(num_docs)
     if encoding_type == "unary":
         encoded_num_docs = to_unary(num_docs)
+        #print(encoded_num_docs)
     elif encoding_type == "gamma":
         encoded_num_docs = to_gamma(num_docs)
     else:
@@ -364,9 +366,12 @@ def make_posting_list(token_id, list_doc_id, list_freq, encoding_type="unary"):
     # Combine the bit streams: number of doc IDs, doc IDs, and frequencies
     bit_stream = encoded_num_docs + ''.join(encoded_gap_list) + ''.join(encoded_freq_list)
 
+    #return bit_stream
+
     # Convert the bit stream into bytes
     compressed_bytes = bit_stream_to_bytes(bit_stream)
     return compressed_bytes
+
 
 
 def read_posting_string(posting_string):

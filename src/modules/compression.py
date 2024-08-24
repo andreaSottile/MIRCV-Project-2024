@@ -49,10 +49,13 @@ def decode_posting_list(compressed_bytes, encoding_type="unary"):
     '''
     # Convert the bytes back into a bit string
     bit_stream = ''.join(f'{byte:08b}' for byte in compressed_bytes)
+    print(bit_stream)
 
     # Step 1: Decode the number of doc IDs
     if encoding_type == "unary":
         num_docs, remaining_bit_stream = decode_unary(bit_stream)
+        print(num_docs)
+        print(remaining_bit_stream)
     elif encoding_type == "gamma":
         num_docs, remaining_bit_stream = decode_gamma(bit_stream)
 
@@ -126,11 +129,11 @@ def decode_gamma(bit_stream):
             gaps.append(gap)
     return gaps, bit_stream[i:]
 
-
+''' 
 # Example usage: Decoding from a binary file
 with open("index_file.bin", "rb") as index_file:
     compressed_bytes = index_file.read()
     decoded_doc_ids = decode_posting_list(compressed_bytes, encoding_type="gamma")
     print(decoded_doc_ids)
-
+'''
 
