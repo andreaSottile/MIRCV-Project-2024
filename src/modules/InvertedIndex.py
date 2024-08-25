@@ -322,7 +322,7 @@ class InvertedIndex:
         open_dataset(limit_row_size, self, add_document_to_index)
         print_log("dataset scan completed", priority=3)
 
-        lines = merge_chunks(posting_file_list, self.index_file_path, self.lexicon_path,
+        lines = merge_chunks(posting_file_list, self.index_file_path, self.lexicon_path, compression=self.compression,
                              delete_after_merge=delete_chunks)
         self.index_len += lines
         #        lines = merge_chunks(lexicon_file_list, self.lexicon_path, self.lexicon_path, mode="lexicon", delete_after_merge=delete_chunks)
@@ -337,40 +337,52 @@ class InvertedIndex:
                 os.remove(self.index_file_path)
         self.save_on_disk()
 
-#token_id not used check
-def make_posting_list(token_id, list_doc_id, list_freq, encoding_type="unary"):
+def make_posting_list(list_doc_id, list_freq, compression=True, encoding_type="unary"):
     # Step 1: Encode the number of doc IDs
     num_docs = len(list_doc_id)
-    #print(num_docs)
-    if encoding_type == "unary":
-        encoded_num_docs = to_unary(num_docs)
-        #print(encoded_num_docs)
-    elif encoding_type == "gamma":
-        encoded_num_docs = to_gamma(num_docs)
-    else:
-        raise ValueError(f"Unsupported encoding type: {encoding_type}")
-    # Step 2: Encode the doc IDs using gap encoding
+    combined = list(zip(list_doc_id, list_freq))
+    combined.sort(key=lambda x: int(x[0]))
+
+    # Scomponi le liste ordinate
+    list_doc_id_sorted, list_freq_sorted = zip(*combined)
+
+    # Converti le tuple risultanti in liste
+    list_doc_id_sorted = list(list_doc_id_sorted)
+    list_freq_sorted = list(list_freq_sorted)
     gap_list = []
     previous_doc_id = 0
-    for doc_id in list_doc_id:
+    for doc_id in list_doc_id_sorted:
         gap_list.append(int(doc_id) - previous_doc_id)
         previous_doc_id = int(doc_id)
+    if compression:
+        if encoding_type == "unary":
+            encoded_num_docs = to_unary(num_docs)
+            #print(encoded_num_docs)
+        elif encoding_type == "gamma":
+            encoded_num_docs = to_gamma(num_docs)
+        else:
+            raise ValueError(f"Unsupported encoding type: {encoding_type}")
+        # Step 2: Encode the doc IDs using gap encoding
 
-    if encoding_type == "unary":
-        encoded_gap_list = [to_unary(gap) for gap in gap_list]
-        encoded_freq_list = [to_unary(int(freq)) for freq in list_freq]
-    elif encoding_type == "gamma":
-        encoded_gap_list = [to_gamma(gap) for gap in gap_list]
-        encoded_freq_list = [to_gamma(int(freq)) for freq in list_freq]
+        if encoding_type == "unary":
+            encoded_gap_list = [to_unary(gap) for gap in gap_list]
+            encoded_freq_list = [to_unary(int(freq)) for freq in list_freq_sorted]
+        elif encoding_type == "gamma":
+            encoded_gap_list = [to_gamma(gap) for gap in gap_list]
+            encoded_freq_list = [to_gamma(int(freq)) for freq in list_freq_sorted]
 
-    # Combine the bit streams: number of doc IDs, doc IDs, and frequencies
-    bit_stream = encoded_num_docs + ''.join(encoded_gap_list) + ''.join(encoded_freq_list)
+        # Combine the bit streams: number of doc IDs, doc IDs, and frequencies
+        bit_stream = encoded_num_docs + ''.join(encoded_gap_list) + ''.join(encoded_freq_list)
 
-    #return bit_stream
+        #return bit_stream
 
-    # Convert the bit stream into bytes
-    compressed_bytes = bit_stream_to_bytes(bit_stream)
-    return compressed_bytes
+        # Convert the bit stream into bytes
+        compressed_bytes = bit_stream_to_bytes(bit_stream)
+        return compressed_bytes
+    else:
+        posting_string = ",".join(list(map(str, gap_list))) + " " + ",".join(list_freq_sorted) + chunk_line_separator
+        return posting_string
+
 
 
 
@@ -558,7 +570,7 @@ def merge_chunks(file_list, output_file_path, mode="", delete_after_merge=True):
 '''
 
 
-def merge_chunks(file_list, index_file_path, lexicon_file_path, delete_after_merge=True):
+def merge_chunks(file_list, index_file_path, lexicon_file_path, compression=False, delete_after_merge=True):
     written_lines = 0
     reader_list = []  # list of pointers to files
     doc_list = []
@@ -576,8 +588,10 @@ def merge_chunks(file_list, index_file_path, lexicon_file_path, delete_after_mer
     if os.path.exists(lexicon_file_path):
         # delete the file if any previous duplicate was present
         os.remove(lexicon_file_path)
-
-    index_file = open(index_file_path, "w+")
+    if(compression==True):
+        index_file = open(index_file_path, "wb+")
+    else:
+        index_file = open(index_file_path, "w+")
     lexicon_file = open(lexicon_file_path, "w+")
 
     while True:
@@ -604,8 +618,8 @@ def merge_chunks(file_list, index_file_path, lexicon_file_path, delete_after_mer
                     output_row = sorted(output_row,
                                         key=lambda x: x.split(docid_separator)[0])
                     next_chunk_index.append(i)
-                else:
-                    print_log("CRITICAL ERROR: Unknown merge mode")
+                #else:
+                #    print_log("CRITICAL ERROR: Unknown merge mode")
             i += 1
         if len(next_chunk_index) > 0:
             # rimpiazzo l'elemento estratto leggendo il successivo
@@ -626,7 +640,7 @@ def merge_chunks(file_list, index_file_path, lexicon_file_path, delete_after_mer
                 #    line += element_separator
             # output_file.write(str(output_key) + posting_separator + line.replace("\n", "") + chunk_line_separator)
             posting_offset = index_file.tell()
-            index_file.write(make_posting_list(output_key, doc_list, occurrence_list, encoding_type="gamma"))
+            index_file.write(make_posting_list(doc_list, occurrence_list, compression, encoding_type="unary"))
 
             written_lines += 1
             lexicon_file.write(output_key + element_separator + str(len(doc_list)) + element_separator + str(

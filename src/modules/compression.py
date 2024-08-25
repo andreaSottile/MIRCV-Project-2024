@@ -40,35 +40,39 @@ def bit_stream_to_bytes(bit_stream):
     return bytes(byte_array)
 
 
-def decode_posting_list(compressed_bytes, encoding_type="unary"):
+def decode_posting_list(compressed_bytes, compression=False, encoding_type="unary"):
     '''
     The decode_posting_list function first reads the binary data and converts it to a string of bits.
     :param compressed_bytes:
     :param encoding_type:
     :return: list_doc_id
     '''
-    # Convert the bytes back into a bit string
-    bit_stream = ''.join(f'{byte:08b}' for byte in compressed_bytes)
-    print(bit_stream)
+    if compression:
+        # Convert the bytes back into a bit string
+        bit_stream = ''.join(f'{byte:08b}' for byte in compressed_bytes)
+        print(bit_stream)
 
-    # Step 1: Decode the number of doc IDs
-    if encoding_type == "unary":
-        num_docs, remaining_bit_stream = decode_unary(bit_stream)
-        print(num_docs)
-        print(remaining_bit_stream)
-    elif encoding_type == "gamma":
-        num_docs, remaining_bit_stream = decode_gamma(bit_stream)
+        # Step 1: Decode the number of doc IDs
+        if encoding_type == "unary":
+            num_docs, remaining_bit_stream = decode_unary(bit_stream, limit=1)
+            print(num_docs)
+            print(remaining_bit_stream)
+        elif encoding_type == "gamma":
+            num_docs, remaining_bit_stream = decode_gamma(bit_stream, limit=1)
 
-    num_docs = num_docs[0]  # We expect a single value for num_docs
+        num_docs = num_docs[0]  # We expect a single value for num_docs
 
-    # Step 2: Decode the doc IDs
-    if encoding_type == "unary":
-        decoded_doc_ids, remaining_bit_stream = decode_unary(remaining_bit_stream, limit=num_docs)
-        decoded_freqs, _ = decode_unary(remaining_bit_stream, limit=num_docs)
-    elif encoding_type == "gamma":
-        decoded_doc_ids, remaining_bit_stream = decode_gamma(remaining_bit_stream, limit=num_docs)
-        decoded_freqs, _ = decode_gamma(remaining_bit_stream, limit=num_docs)
-
+        # Step 2: Decode the doc IDs
+        if encoding_type == "unary":
+            decoded_doc_ids, remaining_bit_stream = decode_unary(remaining_bit_stream, limit=num_docs)
+            decoded_freqs, _ = decode_unary(remaining_bit_stream, limit=num_docs)
+        elif encoding_type == "gamma":
+            decoded_doc_ids, remaining_bit_stream = decode_gamma(remaining_bit_stream, limit=num_docs)
+            decoded_freqs, _ = decode_gamma(remaining_bit_stream, limit=num_docs)
+    else:
+        posting_list = compressed_bytes.split()
+        decoded_doc_ids = map(int, posting_list[0].split(","))
+        decoded_freqs = posting_list[1].split(",")
     # Convert the gaps back to doc IDs
     list_doc_id = []
     previous_doc_id = 0
@@ -100,7 +104,7 @@ def decode_unary(bit_stream, limit=None):
     return gaps, bit_stream[i:]
 
 
-def decode_gamma(bit_stream):
+def decode_gamma(bit_stream, limit=None):
     '''The decode_gamma function interprets the unary-coded length and the binary offset.
         It reconstructs the original number (gap) by combining the offset with the length.
 
@@ -129,11 +133,4 @@ def decode_gamma(bit_stream):
             gaps.append(gap)
     return gaps, bit_stream[i:]
 
-''' 
-# Example usage: Decoding from a binary file
-with open("index_file.bin", "rb") as index_file:
-    compressed_bytes = index_file.read()
-    decoded_doc_ids = decode_posting_list(compressed_bytes, encoding_type="gamma")
-    print(decoded_doc_ids)
-'''
 
