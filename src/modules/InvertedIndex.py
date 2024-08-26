@@ -43,7 +43,7 @@ class InvertedIndex:
         self.name = member_blank_tag
         self.skip_stemming = True
         self.allow_stop_words = True
-        self.compression = False
+        self.compression = "no"
         self.content = []
         self.topk = 0
         self.algorithm = member_blank_tag
@@ -108,10 +108,8 @@ class InvertedIndex:
                 config_file.write("allow_sw" + chunk_line_separator)
             else:
                 config_file.write("remove_sw" + chunk_line_separator)
-            if self.compression:
-                config_file.write("compress" + chunk_line_separator)
-            else:
-                config_file.write("uncompressed" + chunk_line_separator)
+            config_file.write(self.compression + chunk_line_separator)
+
             config_file.write(self.content_to_str() + chunk_line_separator)
             config_file.write(str(self.topk) + chunk_line_separator)
             config_file.write(str(self.algorithm) + chunk_line_separator)
@@ -155,7 +153,7 @@ class InvertedIndex:
                         print_log("index " + str(self.name) + " is about to be loaded", priority=2)
                         self.skip_stemming = (readline_with_strip(config_file) == "skip_stem")
                         self.allow_stop_words = (readline_with_strip(config_file) == "allow_sw")
-                        self.compression = (readline_with_strip(config_file) == "compress")
+                        self.compression = readline_with_strip(config_file)
 
                         self.content_reinit(readline_with_strip(config_file))
                         self.topk = int(readline_with_strip(config_file))
@@ -337,7 +335,7 @@ class InvertedIndex:
                 os.remove(self.index_file_path)
         self.save_on_disk()
 
-def make_posting_list(list_doc_id, list_freq, compression=True, encoding_type="unary"):
+def make_posting_list_old(list_doc_id, list_freq, compression="no"):
     # Step 1: Encode the number of doc IDs
     num_docs = len(list_doc_id)
     combined = list(zip(list_doc_id, list_freq))
@@ -354,20 +352,20 @@ def make_posting_list(list_doc_id, list_freq, compression=True, encoding_type="u
     for doc_id in list_doc_id_sorted:
         gap_list.append(int(doc_id) - previous_doc_id)
         previous_doc_id = int(doc_id)
-    if compression:
-        if encoding_type == "unary":
+    if compression!="no":
+        if compression == "unary":
             encoded_num_docs = to_unary(num_docs)
             #print(encoded_num_docs)
-        elif encoding_type == "gamma":
+        elif compression == "gamma":
             encoded_num_docs = to_gamma(num_docs)
         else:
-            raise ValueError(f"Unsupported encoding type: {encoding_type}")
+            raise ValueError(f"Unsupported encoding type: {compression}")
         # Step 2: Encode the doc IDs using gap encoding
 
-        if encoding_type == "unary":
+        if compression == "unary":
             encoded_gap_list = [to_unary(gap) for gap in gap_list]
             encoded_freq_list = [to_unary(int(freq)) for freq in list_freq_sorted]
-        elif encoding_type == "gamma":
+        elif compression == "gamma":
             encoded_gap_list = [to_gamma(gap) for gap in gap_list]
             encoded_freq_list = [to_gamma(int(freq)) for freq in list_freq_sorted]
 
@@ -383,6 +381,44 @@ def make_posting_list(list_doc_id, list_freq, compression=True, encoding_type="u
         posting_string = ",".join(list(map(str, gap_list))) + " " + ",".join(list_freq_sorted) + chunk_line_separator
         return posting_string
 
+def make_posting_list(list_doc_id, list_freq, compression="no"):
+    # Step 1: Encode the number of doc IDs
+    combined = list(zip(list_doc_id, list_freq))
+    combined.sort(key=lambda x: int(x[0]))
+
+    # Scomponi le liste ordinate
+    list_doc_id_sorted, list_freq_sorted = zip(*combined)
+
+    # Converti le tuple risultanti in liste
+    list_doc_id_sorted = list(list_doc_id_sorted)
+    list_freq_sorted = list(list_freq_sorted)
+    gap_list = []
+    previous_doc_id = 0
+    for doc_id in list_doc_id_sorted:
+        gap_list.append(int(doc_id) - previous_doc_id)
+        previous_doc_id = int(doc_id)
+    if compression!="no":
+        # Step 2: Encode the doc IDs using gap encoding
+        if compression == "unary":
+            encoded_gap_list = [to_unary(gap) for gap in gap_list]
+            encoded_freq_list = [to_unary(int(freq)) for freq in list_freq_sorted]
+        elif compression == "gamma":
+            encoded_gap_list = [to_gamma(gap) for gap in gap_list]
+            encoded_freq_list = [to_gamma(int(freq)) for freq in list_freq_sorted]
+        else:
+            raise ValueError(f"Unsupported encoding type: {compression}")
+
+        # Combine the bit streams: number of doc IDs, doc IDs, and frequencies
+        bit_stream = ''.join(encoded_gap_list) + ''.join(encoded_freq_list)
+
+        #return bit_stream
+
+        # Convert the bit stream into bytes
+        compressed_bytes = bit_stream_to_bytes(bit_stream)
+        return compressed_bytes
+    else:
+        posting_string = ",".join(list(map(str, gap_list))) + " " + ",".join(list_freq_sorted) + chunk_line_separator
+        return posting_string
 
 
 
@@ -570,7 +606,7 @@ def merge_chunks(file_list, output_file_path, mode="", delete_after_merge=True):
 '''
 
 
-def merge_chunks(file_list, index_file_path, lexicon_file_path, compression=False, delete_after_merge=True):
+def merge_chunks(file_list, index_file_path, lexicon_file_path, compression="no", delete_after_merge=True):
     written_lines = 0
     reader_list = []  # list of pointers to files
     doc_list = []
@@ -588,7 +624,7 @@ def merge_chunks(file_list, index_file_path, lexicon_file_path, compression=Fals
     if os.path.exists(lexicon_file_path):
         # delete the file if any previous duplicate was present
         os.remove(lexicon_file_path)
-    if(compression==True):
+    if compression!="no":
         index_file = open(index_file_path, "wb+")
     else:
         index_file = open(index_file_path, "w+")
@@ -640,8 +676,8 @@ def merge_chunks(file_list, index_file_path, lexicon_file_path, compression=Fals
                 #    line += element_separator
             # output_file.write(str(output_key) + posting_separator + line.replace("\n", "") + chunk_line_separator)
             posting_offset = index_file.tell()
-            index_file.write(make_posting_list(doc_list, occurrence_list, compression, encoding_type="unary"))
-
+            #index_file.write(make_posting_list_old(doc_list, occurrence_list, compression))
+            index_file.write(make_posting_list(doc_list, occurrence_list, compression))
             written_lines += 1
             lexicon_file.write(output_key + element_separator + str(len(doc_list)) + element_separator + str(
                 posting_offset) + chunk_line_separator)
