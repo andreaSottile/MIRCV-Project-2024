@@ -39,7 +39,7 @@ if config[6] != "no":
         nbytes = 1276 - 1249
         index_file.seek(1249)
         compressed_bytes = index_file.read(nbytes)
-        decoded_doc_ids_opt, decoded_freq_opt = decode_posting_list(compressed_bytes, encoding_type=config[6])
+        decoded_doc_ids_opt, decoded_freq_opt = decode_posting_list(compressed_bytes, config[6])
         print(decoded_doc_ids_opt)
 else:
     with open("C:/Users/andre/Desktop/AIDE/mircv/indexindt4/index.txt", "r+") as index_file:

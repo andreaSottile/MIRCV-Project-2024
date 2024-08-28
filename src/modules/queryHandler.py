@@ -15,7 +15,9 @@ import math
 import os
 
 from src.config import *
+from src.modules.compression import decode_posting_list
 from src.modules.preprocessing import preprocess_text
+from src.modules.utils import get_last_line, ternary_search, get_row_id, print_log, set_search_interval, next_GEQ_line
 
 
 def get_top_k(k, results):
@@ -62,11 +64,11 @@ class QueryHandler:
         avg_length = total_length_doc / docs_count
         return avg_length
 
-    def query(self, query_string):
+    def query(self, query_string, search_algorithm):
         print_log("received query", 2)
         query_terms = self.prepare_query(query_string)
         print_log("reading posting lists for each query term", 2)
-        raw_posting_lists = self.fetch_posting_lists(query_terms)
+        raw_posting_lists = self.fetch_posting_lists(query_terms, search_algorithm)
         print_log("converting post list to dictionaries", 2)
         posting_lists = make_posting_candidates(raw_posting_lists)
         print_log("calculating relevance with algorithm: " + self.index.algorithm, 2)
@@ -80,8 +82,32 @@ class QueryHandler:
         ranked_list = {k: v for k, v in sorted(results.items(), key=lambda x: x[1])}
         return ranked_list[0:self.index.topk]
 
-    def fetch_posting_lists(self, query_terms):
-        res = search_in_file(self.index.index_file_path, self.index.index_len, query_terms, posting_separator)
+    def fetch_posting_lists(self, query_terms, search_algorithm):
+        '''
+        This function needs to:
+        read lexicon file
+        search query terms
+        for each query term:
+            read its posting list
+            append the posting list to a list of results (strings)
+        :param query_terms:
+        :return:
+        '''
+        res=[]
+        if self.index.is_ready():
+            print_log("Calling Search on unknown index", 0)
+            print_log(self.index.index_file_path, 0)
+            return []
+        print_log("opening file " + str(self.index.index_file_path), 4)
+        if self.index.compression!= "no":
+            index_file = open(self.index.index_file_path, "rb")
+        else:
+            index_file = open(self.index.index_file_path, "r+")
+        with open(self.index.lexicon_path, 'r+') as f:
+            for token in query_terms:
+                res_offset_intervals = search_in_lexicon(f, token, search_algorithm)
+                res_posting_string = search_in_index(res_offset_intervals, index_file, self.index.compression)
+                res.append(token + res_posting_string)
         return res
 
     def fetch_doc_size(self, key):
@@ -171,22 +197,61 @@ def make_posting_candidates(raw_posting_lists):
     # make a dictionary of posting lists {token_key : posting_list_dictionary}
     # where each posting_list_dictionary is a { docid: term_freq}
     res = {}
+    # each pl is a string representing a posting list
     for pl in raw_posting_lists:
         token_key, posting_list = read_posting_list(pl)
         res[token_key] = posting_list
     return res
 
+def search_in_index(self, res_offset, index_file, compression):
+    # index_file.seek(7802)
+    # compressed_bytes = index_file.read()
+    # decoded_doc_ids, decoded_freq = decode_posting_list(compressed_bytes, config[6], encoding_type="unary")
+    # print(decoded_doc_ids)
+    for offset_start, offset_stop in res_offset:
+        nbytes = offset_stop - offset_start
+        index_file.seek(offset_start)
+        compressed_bytes = index_file.read(nbytes)
+        posting_list_string_decoded = decode_posting_list(compressed_bytes, compression)
+    return posting_list_string_decoded
 
-def search_in_file(file_path, file_size, query_terms, key_delimiter):
+def search_in_lexicon(lexicon, query_terms, method):
     # search some query_terms inside a file
     # returns a list of posting lists
-    # TODO : Pruning
-    if not os.path.exists(file_path):
-        print_log("Calling Search on unknown path", 0)
-        print_log(file_path, 0)
-        return []
-    print_log("opening file " + str(file_path), 4)
+
     results = []
+    last_read_position = 0
+    for key in query_terms:
+        if method == "ternary":
+            last_line_pos, last_line = get_last_line(lexicon)
+            line_pos, line = ternary_search(f, start_position=last_read_position, target_key=key,
+                                            delimiter=key_delimiter, end_position=last_line_pos,
+                                            last_key=get_row_id(last_line, key_delimiter), last_row=last_line)
+        elif method == "skipping":
+            step = search_chunk_size_config
+            line_pos, high, line = set_search_interval(lexicon, last_read_position, key, key_delimiter,
+                                                       step_size=step)
+            # skipping big chunks when reading lots of files, small chunks when search interval is smaller
+            while step >= 1:
+                step = step // 10
+                line_pos, high, line = set_search_interval(lexicon, line_pos, key, key_delimiter,
+                                                           step_size=step)
+                if key == get_row_id(line, key_delimiter):
+                    break
+            # precision scan
+            while key != get_row_id(line, key_delimiter):
+                line_pos, line = next_GEQ_line(lexicon, lexicon.tell())
+                if lexicon.tell() > high:
+                    # termination condition: nothing found
+                    line_pos = -1
+                    break
+
+        if line_pos != -1:
+            # i have found the correct word
+            results.append(line.strip())
+            # since i enforced the query_terms list to be sorted, there is no need to look the same lines again
+            last_read_position = line_pos
+    return results
 
     def read_line_at(file_pointer, row_id):
         print_log("opening file at line " + str(row_id), 5)

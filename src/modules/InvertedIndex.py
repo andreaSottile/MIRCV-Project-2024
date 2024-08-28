@@ -19,7 +19,7 @@ import os
 from src.modules.compression import compress_index, to_unary, to_gamma, bit_stream_to_bytes
 from src.modules.documentProcessing import open_dataset
 from src.modules.preprocessing import preprocess_text, count_token_occurrences
-from src.modules.utils import readline_with_strip
+from src.modules.utils import readline_with_strip, print_log
 
 # lexicon_buffer = []  # memory buffer
 posting_buffer = []  # memory buffer

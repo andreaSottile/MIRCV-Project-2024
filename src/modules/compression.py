@@ -1,4 +1,4 @@
-from src.config import print_log
+from src.modules.utils import print_log
 
 
 def compress_index(index_name, index_file_path, index_lexicon_path):
@@ -64,14 +64,20 @@ def decode_posting_list(compressed_bytes, compression="no"):
         decoded_doc_ids = map(int, posting_list[0].split(","))
         decoded_freqs = posting_list[1].split(",")
     # Convert the gaps back to doc IDs
-    list_doc_id = []
+    #list_doc_id = []
+    list_doc_id_string=""
     previous_doc_id = 0
     for gap in decoded_doc_ids:
         doc_id = previous_doc_id + gap
-        list_doc_id.append(doc_id)
+        list_doc_id_string += doc_id + ","
+        #list_doc_id.append(doc_id)
         previous_doc_id = doc_id
+    posting_list_string_decoded = list_doc_id_string + " "
+    for freq in decoded_freqs:
+        posting_list_string_decoded += freq + ","
+    return posting_list_string_decoded
 
-    return list_doc_id, decoded_freqs
+    #return list_doc_id, decoded_freqs
 
 
 def decode_posting_list_old(compressed_bytes, compression=False, encoding_type="unary"):

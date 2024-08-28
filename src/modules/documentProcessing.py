@@ -18,11 +18,13 @@ stemming algorithm or similar. For stopword removal, you can use any english
 stopwords list available on the Web. Ideally, your program should have a compile
 flag that allows you to enalbe/disble stemming & stopword removal.
 """
-import pandas as pd
 import io
-from src.config import collection_path_config, print_log, limit_input_rows_config
 import tarfile
 
+import pandas as pd
+
+from src.config import collection_path_config, limit_input_rows_config
+from src.modules.utils import print_log
 
 def open_dataset(count_limit=-1, index=None, process_function=None):
     if count_limit > 0 and 0 < limit_input_rows_config < count_limit:
