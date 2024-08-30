@@ -4,17 +4,25 @@
 # 3 : function calls
 # 4 : row by row (debug)
 # 5 : loop iterations
+from src.config import verbosity_config
+
+
 def print_log(msg, priority=0):
-    global verbosity_config
     if priority <= verbosity_config:
         print(msg)
+
+
 def readline_with_strip(file):
     string = file.readline().strip()
     return string
 
+
 def get_last_line(file_pointer):
+    # Get the position of the end of the file
+    # returns the cursor position where the last line starts, and the last line
+
     file_pointer.seek(0, 2)  # 2 means SEEK_END
-    end_pos = file_pointer.tell()  # Get the position of the end of the file ( tell() method returns the current file position in a file stream)
+    end_pos = file_pointer.tell()  # tell() method returns the current file position in a file stream
     # Start from the end of the file
     file_pointer.seek(-2, 2)  # last byte is a \n, so move it back by 2 chars
 
@@ -40,6 +48,7 @@ def get_row_id(row_string, key_delimiter):
     # cut the row to read only the key (which i'm going to need for comparisons)
     return row_string.split(key_delimiter)[0]
 
+
 def set_search_interval(file_pointer, start, key, key_delimiter, step_size):
     # divide the file in chunks, and look for the correct one where to look for the key-word
     # @ param file_pointer : file where to look for
@@ -60,10 +69,11 @@ def set_search_interval(file_pointer, start, key, key_delimiter, step_size):
     print_log("Skipped " + str(skipped) + " chunks", 5)
     return low, high, top_row
 
+
 def next_GEQ_line(file_pointer, position):
     '''
     given a position (bytes in a file), read the next whole line available there
-
+    IMPORTANT: it works with cursor positions, and NOT with IDs
     :param file_pointer: pointer to the Lexicon file
     :param position: start position
     :return:
@@ -75,6 +85,7 @@ def next_GEQ_line(file_pointer, position):
     file_EOF_pos = file_pointer.seek(0, 2)
     # special case, position is beyond the file size
     if position >= file_EOF_pos:
+        # avoid returning empty stuff, for easier handling
         return get_last_line(file_pointer)
 
     # set the pointer position
@@ -83,7 +94,7 @@ def next_GEQ_line(file_pointer, position):
     if position == 0:  # special case, no need to skip positions
         return 0, file_pointer.readline().decode()
 
-    # since the pointer is likely to be in the middle of a row, move the pointer to the next row start
+    # move the pointer to the next row start
     file_pointer.readline()
     # returns the position of the row start, and the read row
     line_start = file_pointer.tell()
@@ -148,7 +159,7 @@ def ternary_search(file_pointer, start_position, target_key, delimiter, end_posi
                 return pivot_1_pos, pivot_1_row
 
             if previous_low == low_pos and previous_high == pivot_1_pos:
-                if (first_time > 0):
+                if first_time > 0:
                     first_time = 0
                     # avoid infinite loop if the term is not present
                     break
@@ -188,7 +199,7 @@ def ternary_search(file_pointer, start_position, target_key, delimiter, end_posi
                 return pivot_2_pos, pivot_2_row
 
             if previous_low == pivot_1_pos and previous_high == pivot_2_pos:
-                if (first_time > 0):
+                if first_time > 0:
                     first_time = 0
                     # avoid infinite loop if the term is not present
                     break
@@ -225,4 +236,3 @@ def ternary_search(file_pointer, start_position, target_key, delimiter, end_posi
         low_key = pivot_2_key
     print_log("found nothing", 4)
     return -1, ""
-

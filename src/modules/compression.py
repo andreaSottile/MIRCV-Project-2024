@@ -39,9 +39,11 @@ def bit_stream_to_bytes(bit_stream):
 
     return bytes(byte_array)
 
+
 def decode_posting_list(compressed_bytes, compression="no"):
     '''
     The decode_posting_list function first reads the binary data and converts it to a string of bits.
+    :param compression:
     :param compressed_bytes:
     :param encoding_type:
     :return: list_doc_id
@@ -56,33 +58,37 @@ def decode_posting_list(compressed_bytes, compression="no"):
             decoded_numbers = decode_unary(bit_stream)
         elif compression == "gamma":
             decoded_numbers = decode_gamma(bit_stream)
-        half_doc_number= int(len(decoded_numbers)/2)
+        else:
+            print_log("Critical error: compression method not found")
+            return ""
+        half_doc_number = int(len(decoded_numbers) / 2)
         decoded_doc_ids = decoded_numbers[:half_doc_number]
-        decoded_freqs= decoded_numbers[half_doc_number:]
+        decoded_freqs = decoded_numbers[half_doc_number:]
     else:
         posting_list = compressed_bytes.split()
         decoded_doc_ids = map(int, posting_list[0].split(","))
         decoded_freqs = posting_list[1].split(",")
     # Convert the gaps back to doc IDs
-    #list_doc_id = []
-    list_doc_id_string=""
+    # list_doc_id = []
+    list_doc_id_string = ""
     previous_doc_id = 0
     for gap in decoded_doc_ids:
         doc_id = previous_doc_id + gap
-        list_doc_id_string += doc_id + ","
-        #list_doc_id.append(doc_id)
+        list_doc_id_string += str(doc_id) + ","
+        # list_doc_id.append(doc_id)
         previous_doc_id = doc_id
     posting_list_string_decoded = list_doc_id_string + " "
     for freq in decoded_freqs:
-        posting_list_string_decoded += freq + ","
+        posting_list_string_decoded += str(freq) + ","
     return posting_list_string_decoded
 
-    #return list_doc_id, decoded_freqs
+    # return list_doc_id, decoded_freqs
 
 
 def decode_posting_list_old(compressed_bytes, compression=False, encoding_type="unary"):
     '''
     The decode_posting_list function first reads the binary data and converts it to a string of bits.
+    :param compression:
     :param compressed_bytes:
     :param encoding_type:
     :return: list_doc_id
@@ -123,6 +129,7 @@ def decode_posting_list_old(compressed_bytes, compression=False, encoding_type="
 
     return list_doc_id, decoded_freqs
 
+
 def decode_unary(bit_stream):
     '''
     The decode_unary function processes the bit stream by counting consecutive 1s followed by a 0 to determine the
@@ -142,6 +149,7 @@ def decode_unary(bit_stream):
             count = 0
         i += 1
     return gaps
+
 
 def decode_unary_old(bit_stream, limit=None):
     '''
@@ -183,7 +191,7 @@ def decode_gamma(bit_stream):
     i = 0
     while i < len(bit_stream):
         length = 0
-        padding=True
+        padding = True
         while i < len(bit_stream) and bit_stream[i] == '1':
             length += 1
             i += 1
@@ -224,7 +232,7 @@ def decode_gamma_old(bit_stream, limit=None):
     i = 0
     while i < len(bit_stream) and (limit is None or len(gaps) < limit):
         length = 0
-        padding=True
+        padding = True
         while i < len(bit_stream) and bit_stream[i] == '1':
             length += 1
             i += 1
@@ -245,5 +253,3 @@ def decode_gamma_old(bit_stream, limit=None):
                 gap = 1 << (length)
                 gaps.append(gap)
     return gaps, bit_stream[i:]
-
-
