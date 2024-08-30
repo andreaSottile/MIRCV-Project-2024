@@ -3,7 +3,7 @@ import time
 from src.modules.documentProcessing import open_dataset, fetch_data_row_from_collection
 
 print("reading some files")
-data = open_dataset()
+data = open_dataset(count_limit=300)
 
 # data is a dataframe. it contains two columns: index and value.
 # each value is like this : id \t text

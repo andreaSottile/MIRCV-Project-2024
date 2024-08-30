@@ -2,7 +2,7 @@ import time
 from collections import Counter
 
 from nltk.corpus import stopwords
-from src.modules.documentProcessing import open_dataset, fetch_data_row_from_collection
+from src.modules.documentProcessing import fetch_data_row_from_collection
 from src.modules.preprocessing import clean_text, remove_stopwords, stemming, tokenizer
 
 stop_words = set(stopwords.words('english'))
