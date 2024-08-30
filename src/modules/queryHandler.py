@@ -64,11 +64,13 @@ class QueryHandler:
         avg_length = total_length_doc / docs_count
         return avg_length
 
-    def query(self, query_string, search_algorithm):
+    def query(self, query_string, search_file_algorithms):
         print_log("received query", 2)
         query_terms = self.prepare_query(query_string)
-        print_log("reading posting lists for each query term", 2)
-        raw_posting_lists = self.fetch_posting_lists(query_terms, search_algorithm)
+        print_log("reading each posting lists for: ", 2)
+        print_log(query_terms, 2)
+        raw_posting_lists = self.fetch_posting_lists(query_terms, search_file_algorithms)
+        # raw_posting_lists is a list of strings, where each string is a
         print_log("converting post list to dictionaries", 2)
         posting_lists = make_posting_candidates(raw_posting_lists)
         print_log("calculating relevance with algorithm: " + self.index.algorithm, 2)
@@ -90,30 +92,41 @@ class QueryHandler:
         for each query term:
             read its posting list
             append the posting list to a list of results (strings)
-        :param query_terms:
+        :param search_algorithm: pick an algorithm from the ones available (see config file)
+        :param query_terms: list of words (strings) to search for
         :return:
         '''
-        res=[]
+        res = []
         if self.index.is_ready():
             print_log("Calling Search on unknown index", 0)
             print_log(self.index.index_file_path, 0)
             return []
+
+        # required to open both lexicon and inverted index
         print_log("opening file " + str(self.index.index_file_path), 4)
-        if self.index.compression!= "no":
+        if self.index.compression != "no":
             index_file = open(self.index.index_file_path, "rb")
         else:
             index_file = open(self.index.index_file_path, "r+")
         with open(self.index.lexicon_path, 'r+') as f:
-            for token in query_terms:
-                res_offset_intervals = search_in_lexicon(f, token, search_algorithm)
-                res_posting_string = search_in_index(res_offset_intervals, index_file, self.index.compression)
-                res.append(token + res_posting_string)
+            for token in query_terms:  # for each token...
+                # search in lexicon for the offsets (start and finish in the inv.index file)
+                res_offset_interval, doc_freq = search_in_lexicon(f, token, search_algorithm)
+                if doc_freq == -1:
+                    # token not found in lexicon
+                    res.append("")
+                else:
+                    # fetch the posting list from inv. index file
+                    res_posting_string = search_in_index(index_file, res_offset_interval, self.index.compression)
+                    # store the posting list for each word
+                    res.append(res_posting_string)
+                    # TODO : gestire doc_freq
         return res
 
     def fetch_doc_size(self, key):
         #    expected row from the collection statistics file:
         #    docid + collection_separator + docno + collection_separator + size + chunk_line_separator
-        res = search_in_file(self.index.collection_statistics_path, self.index.num_doc, [key], collection_separator)
+        res = search_in_doclist(self.index.collection_statistics_path, self.index.num_doc, [key], collection_separator)
         # res is a string like "docid,docno,doc_size"
         size = res[0].split(collection_separator)[2]
         return int(size)
@@ -203,94 +216,87 @@ def make_posting_candidates(raw_posting_lists):
         res[token_key] = posting_list
     return res
 
-def search_in_index(self, res_offset, index_file, compression):
+
+def search_in_index(index_file, res_offset,  compression):
     # index_file.seek(7802)
     # compressed_bytes = index_file.read()
     # decoded_doc_ids, decoded_freq = decode_posting_list(compressed_bytes, config[6], encoding_type="unary")
     # print(decoded_doc_ids)
-    for offset_start, offset_stop in res_offset:
-        nbytes = offset_stop - offset_start
-        index_file.seek(offset_start)
-        compressed_bytes = index_file.read(nbytes)
-        posting_list_string_decoded = decode_posting_list(compressed_bytes, compression)
-    return posting_list_string_decoded
+    offset_start = res_offset[0]
+    offset_stop = res_offset[1]
+    nbytes = offset_stop - offset_start
+    index_file.seek(offset_start)
+    compressed_bytes = index_file.read(nbytes)
+    decoded_posting_list_string = decode_posting_list(compressed_bytes, compression)
+    return decoded_posting_list_string
 
-def search_in_lexicon(lexicon, query_terms, method):
-    # search some query_terms inside a file
-    # returns a list of posting lists
+
+def search_in_lexicon(lexicon, token, search_algorithm):
+    '''
+    open the lexicon file given one query word, and return its entry
+    :param lexicon: pointer to the lexicon file
+    :param token: query word to look for
+    :param search_algorithm: user can choose any one search algorithm implemented
+    :return 1: offset interval <start,stop> relative to "token" for the lexicon file
+    :return 2: doc frequency: number of documents that contain the token at least once
+    '''
 
     results = []
     last_read_position = 0
-    for key in query_terms:
-        if method == "ternary":
-            last_line_pos, last_line = get_last_line(lexicon)
-            line_pos, line = ternary_search(f, start_position=last_read_position, target_key=key,
-                                            delimiter=key_delimiter, end_position=last_line_pos,
-                                            last_key=get_row_id(last_line, key_delimiter), last_row=last_line)
-        elif method == "skipping":
-            step = search_chunk_size_config
-            line_pos, high, line = set_search_interval(lexicon, last_read_position, key, key_delimiter,
+    line_pos = -1
+    line = ""
+    if search_algorithm == "ternary":
+        last_line_pos, last_line = get_last_line(lexicon)
+        line_pos, line = ternary_search(lexicon, start_position=last_read_position, target_key=token,
+                                        delimiter=element_separator, end_position=last_line_pos,
+                                        last_key=get_row_id(last_line, element_separator), last_row=last_line)
+    elif search_algorithm == "skipping":
+        step = search_chunk_size_config
+        line_pos, high, line = set_search_interval(lexicon, last_read_position, token, element_separator,
+                                                   step_size=step)
+        # skipping big chunks when reading lots of files, small chunks when search interval is smaller
+        while step >= 1:
+            step = step // 10
+            line_pos, high, line = set_search_interval(lexicon, line_pos, token, element_separator,
                                                        step_size=step)
-            # skipping big chunks when reading lots of files, small chunks when search interval is smaller
-            while step >= 1:
-                step = step // 10
-                line_pos, high, line = set_search_interval(lexicon, line_pos, key, key_delimiter,
-                                                           step_size=step)
-                if key == get_row_id(line, key_delimiter):
-                    break
-            # precision scan
-            while key != get_row_id(line, key_delimiter):
-                line_pos, line = next_GEQ_line(lexicon, lexicon.tell())
-                if lexicon.tell() > high:
-                    # termination condition: nothing found
-                    line_pos = -1
-                    break
+            if token == get_row_id(line, element_separator):
+                break
+        # precision scan
+        while token != get_row_id(line, element_separator):
+            line_pos, line = next_GEQ_line(lexicon, lexicon.tell())
+            if lexicon.tell() > high:
+                # termination condition: nothing found
+                line_pos = -1
+                break
 
         if line_pos != -1:
             # i have found the correct word
             results.append(line.strip())
             # since i enforced the query_terms list to be sorted, there is no need to look the same lines again
             last_read_position = line_pos
-    return results
+    else:
+        print_log("Critical error: cannot search without a search algorithm", 0)
+        return []
 
-    def read_line_at(file_pointer, row_id):
-        print_log("opening file at line " + str(row_id), 5)
-        file_pointer.seek(row_id)
-        file_pointer.readline()  # Skip partial line
-        return file_pointer.readline().decode()
+    # search failed: return a blank
+    if line_pos == -1:
+        print_log("Cannot find token " + str(token) + " in lexicon", 2)
+        return [], -1
 
-    def binary_search_file(file_pointer, target_key): #  TODO
-        # at the first execution, left and right are the first and the last line
-        left, right = 0, file_size
-        print_log("binary searching " + str(target_key), 5)
-        while str(left) < str(right):
-            mid = (left + right) // 2
-            value = read_line_at(file_pointer, mid)
-            if not value:
-                # this should never happen, since we know there are no blank lines
-                print_log("value not found at line "+str(mid))
-                right = mid
-                continue
-            current_key = value.split(key_delimiter)[0]
-            if current_key < target_key:
-                left = mid
-            else:
-                right = mid
-        return left
+    # search success: return offset and docfreq
+    _, next_line = next_GEQ_line(lexicon, line_pos + 1)
 
-    with open(file_path, 'rb') as f:
-        for key in query_terms:
-            pos = binary_search_file(f, key)
-            print_log("search result : " + str(pos), 5)
-            f.seek(pos)
-            while True:
-                line = f.readline().decode()
-                if not line or line.startswith(key + key_delimiter):
-                    break
-            if line.startswith(key + key_delimiter):
-                results.append(line.strip())
+    _, docfreq, start_offset = read_lexicon_line(line)
+    _, _, stop_offset = read_lexicon_line(next_line)
 
-    return results
+    return [start_offset, stop_offset], docfreq
+
+
+def read_lexicon_line(line):
+    # lexicon line structure:
+    # token_id;doc_freq;offset_in_index
+    content = line.split(element_separator)
+    return content[0], content[1], content[2]
 
 
 def preprocess_query_string(query_raw, stem_flag, stop_flag):

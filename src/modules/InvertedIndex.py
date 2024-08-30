@@ -335,6 +335,7 @@ class InvertedIndex:
                 os.remove(self.index_file_path)
         self.save_on_disk()
 
+
 def make_posting_list_old(list_doc_id, list_freq, compression="no"):
     # Step 1: Encode the number of doc IDs
     num_docs = len(list_doc_id)
@@ -352,10 +353,10 @@ def make_posting_list_old(list_doc_id, list_freq, compression="no"):
     for doc_id in list_doc_id_sorted:
         gap_list.append(int(doc_id) - previous_doc_id)
         previous_doc_id = int(doc_id)
-    if compression!="no":
+    if compression != "no":
         if compression == "unary":
             encoded_num_docs = to_unary(num_docs)
-            #print(encoded_num_docs)
+            # print(encoded_num_docs)
         elif compression == "gamma":
             encoded_num_docs = to_gamma(num_docs)
         else:
@@ -372,7 +373,7 @@ def make_posting_list_old(list_doc_id, list_freq, compression="no"):
         # Combine the bit streams: number of doc IDs, doc IDs, and frequencies
         bit_stream = encoded_num_docs + ''.join(encoded_gap_list) + ''.join(encoded_freq_list)
 
-        #return bit_stream
+        # return bit_stream
 
         # Convert the bit stream into bytes
         compressed_bytes = bit_stream_to_bytes(bit_stream)
@@ -380,6 +381,7 @@ def make_posting_list_old(list_doc_id, list_freq, compression="no"):
     else:
         posting_string = ",".join(list(map(str, gap_list))) + " " + ",".join(list_freq_sorted) + chunk_line_separator
         return posting_string
+
 
 def make_posting_list(list_doc_id, list_freq, compression="no"):
     # Step 1: Encode the number of doc IDs
@@ -397,7 +399,7 @@ def make_posting_list(list_doc_id, list_freq, compression="no"):
     for doc_id in list_doc_id_sorted:
         gap_list.append(int(doc_id) - previous_doc_id)
         previous_doc_id = int(doc_id)
-    if compression!="no":
+    if compression != "no":
         # Step 2: Encode the doc IDs using gap encoding
         if compression == "unary":
             encoded_gap_list = [to_unary(gap) for gap in gap_list]
@@ -411,7 +413,7 @@ def make_posting_list(list_doc_id, list_freq, compression="no"):
         # Combine the bit streams: number of doc IDs, doc IDs, and frequencies
         bit_stream = ''.join(encoded_gap_list) + ''.join(encoded_freq_list)
 
-        #return bit_stream
+        # return bit_stream
 
         # Convert the bit stream into bytes
         compressed_bytes = bit_stream_to_bytes(bit_stream)
@@ -419,7 +421,6 @@ def make_posting_list(list_doc_id, list_freq, compression="no"):
     else:
         posting_string = ",".join(list(map(str, gap_list))) + " " + ",".join(list_freq_sorted) + chunk_line_separator
         return posting_string
-
 
 
 def read_posting_string(posting_string):
@@ -441,19 +442,19 @@ def load_from_disk(name):
         return None
 
 
-def index_setup(name, stemming_flag, stop_words_flag, compression_flag, k, algorithm, scoring_f, eval_f):
+def index_setup(name, stemming_flag, stop_words_flag, compression_flag, k, join_algorithm, scoring_f, eval_f):
     print_log("setup for new index", 4)
     ind = InvertedIndex()
     print_log("created index", 4)
-    ind.rename(name)
+    ind.rename(name) # string
     print_log("setting flags", 4)
-    ind.skip_stemming = stemming_flag
-    ind.allow_stop_words = stop_words_flag
-    ind.compression = compression_flag
-    ind.topk = k
-    ind.algorithm = algorithm
-    ind.scoring = scoring_f
-    ind.evaluation = eval_f
+    ind.skip_stemming = stemming_flag # boolean
+    ind.allow_stop_words = stop_words_flag # boolean
+    ind.compression = compression_flag # string, see config
+    ind.topk = k    # number of results to return
+    ind.algorithm = join_algorithm # conjunctive or disjunctive
+    ind.scoring = scoring_f # string, see config
+    ind.evaluation = eval_f # string, see config
     print_log("setup completed, saving to disk", 3)
     ind.save_on_disk()
     print_log("saved complete", 4)
@@ -624,7 +625,7 @@ def merge_chunks(file_list, index_file_path, lexicon_file_path, compression="no"
     if os.path.exists(lexicon_file_path):
         # delete the file if any previous duplicate was present
         os.remove(lexicon_file_path)
-    if compression!="no":
+    if compression != "no":
         index_file = open(index_file_path, "wb+")
     else:
         index_file = open(index_file_path, "w+")
@@ -654,7 +655,7 @@ def merge_chunks(file_list, index_file_path, lexicon_file_path, compression="no"
                     output_row = sorted(output_row,
                                         key=lambda x: x.split(docid_separator)[0])
                     next_chunk_index.append(i)
-                #else:
+                # else:
                 #    print_log("CRITICAL ERROR: Unknown merge mode")
             i += 1
         if len(next_chunk_index) > 0:
@@ -676,7 +677,7 @@ def merge_chunks(file_list, index_file_path, lexicon_file_path, compression="no"
                 #    line += element_separator
             # output_file.write(str(output_key) + posting_separator + line.replace("\n", "") + chunk_line_separator)
             posting_offset = index_file.tell()
-            #index_file.write(make_posting_list_old(doc_list, occurrence_list, compression))
+            # index_file.write(make_posting_list_old(doc_list, occurrence_list, compression))
             index_file.write(make_posting_list(doc_list, occurrence_list, compression))
             written_lines += 1
             lexicon_file.write(output_key + element_separator + str(len(doc_list)) + element_separator + str(
