@@ -72,14 +72,24 @@ def decode_posting_list(compressed_bytes, compression="no"):
     # list_doc_id = []
     list_doc_id_string = ""
     previous_doc_id = 0
+    first = True
     for gap in decoded_doc_ids:
         doc_id = previous_doc_id + gap
-        list_doc_id_string += str(doc_id) + ","
+        if first:
+            list_doc_id_string += str(doc_id)
+            first = False
+        else:
+            list_doc_id_string += "," + str(doc_id)
         # list_doc_id.append(doc_id)
         previous_doc_id = doc_id
     posting_list_string_decoded = list_doc_id_string + " "
+    first = True
     for freq in decoded_freqs:
-        posting_list_string_decoded += str(freq) + ","
+        if first:
+            posting_list_string_decoded += str(freq)
+            first = False
+        else:
+            posting_list_string_decoded += "," + str(freq)
     return posting_list_string_decoded
 
     # return list_doc_id, decoded_freqs

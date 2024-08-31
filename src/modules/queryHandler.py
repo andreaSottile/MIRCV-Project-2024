@@ -16,6 +16,7 @@ import os
 
 from src.config import *
 from src.modules.compression import decode_posting_list
+from src.modules.postingList import postingList
 from src.modules.preprocessing import preprocess_text
 from src.modules.utils import get_last_line, ternary_search, get_row_id, print_log, set_search_interval, next_GEQ_line
 
@@ -69,14 +70,14 @@ class QueryHandler:
         query_terms = self.prepare_query(query_string)
         print_log("reading each posting lists for: ", 2)
         print_log(query_terms, 2)
-        raw_posting_lists = self.fetch_posting_lists(query_terms, search_file_algorithms)
+        raw_posting_lists, doc_freq_list = self.fetch_posting_lists(query_terms, search_file_algorithms)
         # raw_posting_lists is a list of strings, where each string is a
         print_log("converting post list to dictionaries", 2)
-        posting_lists = make_posting_candidates(raw_posting_lists)
+        posting_lists = make_posting_candidates(query_terms, raw_posting_lists)
         print_log("calculating relevance with algorithm: " + self.index.algorithm, 2)
-        relevant_documents = self.detect_relevant_documents(posting_lists)
-        print_log("calculating scores for relevant documents", 2)
-        scores = self.compute_scoring_function(posting_lists, relevant_documents)
+        related_documents = self.detect_related_documents(posting_lists)
+        print_log("calculating scores for related documents", 2)
+        scores = self.compute_scoring_function(posting_lists, related_documents, search_file_algorithms)
         return get_top_k(self.index.topk, scores)
 
     def extract_top_k(self, results):
@@ -97,7 +98,8 @@ class QueryHandler:
         :return:
         '''
         res = []
-        if self.index.is_ready():
+        doc_freq_array=[]
+        if not self.index.is_ready():
             print_log("Calling Search on unknown index", 0)
             print_log(self.index.index_file_path, 0)
             return []
@@ -112,6 +114,7 @@ class QueryHandler:
             for token in query_terms:  # for each token...
                 # search in lexicon for the offsets (start and finish in the inv.index file)
                 res_offset_interval, doc_freq = search_in_lexicon(f, token, search_algorithm)
+                doc_freq_array.append(doc_freq)
                 if doc_freq == -1:
                     # token not found in lexicon
                     res.append("")
@@ -120,99 +123,99 @@ class QueryHandler:
                     res_posting_string = search_in_index(index_file, res_offset_interval, self.index.compression)
                     # store the posting list for each word
                     res.append(res_posting_string)
-                    # TODO : gestire doc_freq
-        return res
+        return res, doc_freq_array
 
-    def fetch_doc_size(self, key):
+    def fetch_doc_size(self, key, search_file_algorithms):
         #    expected row from the collection statistics file:
         #    docid + collection_separator + docno + collection_separator + size + chunk_line_separator
-        res = search_in_doclist(self.index.collection_statistics_path, self.index.num_doc, [key], collection_separator)
+        doc_stats_file = open(self.index.collection_statistics_path, "r+")
+        size = search_in_doc_stats_file(doc_stats_file, key, search_file_algorithms)
         # res is a string like "docid,docno,doc_size"
-        size = res[0].split(collection_separator)[2]
         return int(size)
 
-    def detect_relevant_documents(self, posting_lists):
+    def detect_related_documents(self, posting_lists):
         # take all the token_keys from the first element
         if len(posting_lists) < 1:
             print_log("no posting list found: ", 2)
             print_log(posting_lists, 2)
             return []
         # initialize the candidates with the keys of the first posting list
-        candidates = set(posting_lists[next(iter(posting_lists))].keys())
+        candidates = set(posting_lists[next(iter(posting_lists))].docids)
         print_log("first set of candidates", 3)
         print_log(candidates, 3)
         for term in posting_lists:  # TODO: skip the first
             if self.index.algorithm == "conjunctive":
                 # intersection
-                candidates &= set(posting_lists[term].keys())
+                candidates &= set(posting_lists[term].docids)
                 print_log("conjunctive candidates", 5)
                 print_log(candidates, 5)
             elif self.index.algorithm == "disjunctive":
                 # union
                 print_log("disjunctive candidates", 5)
                 print_log(candidates, 5)
-                for new_token in posting_lists[term].keys():
-                    candidates.add(new_token)
+                for new_token_doc_ids in posting_lists[term].docids:
+                    candidates.add(new_token_doc_ids)
             else:
                 print_log("CRITICAL ERROR: query algorithm not set", 0)
                 return []
-        # returns a list of relevant docids
-        print_log("relevant documents list", 2)
+        # returns a list of related docids
+        print_log("related documents ID list", 2)
         print_log(candidates, 2)
         return sorted(list(candidates), key=lambda x: int(x))
 
-    def compute_scoring_function(self, posting_lists, relevant_documents):
+    def compute_scoring_function(self, posting_lists, related_documents, search_file_algorithms):
         # @ param query_terms : list of words in the query string
         # @ param doc_count : number of documents in the index
         # @ param doclen_avg : average of len of all the docs in the collection
         # @ param scoring_f : string for scoring function (see configs for options)
         # return the scored list of the relevant documents {docid,score}
         scores = {}
-        if not relevant_documents:
+        if not related_documents:
             print_log("Cannot compute scores, no relevant document detected", 1)
             return {}
         print(posting_lists)
-        for token_key, posting_dict in posting_lists.items():
+        for token_key, postingListObj in posting_lists.items():
             # log ( N of docs in the collection / N of relevant docs )
-            idf = math.log(self.num_docs / len(posting_dict.keys()))
+            idf = math.log(self.num_docs / len(postingListObj.docids))
             print_log("calculated IDF : " + str(idf), 3)
 
             # read posting list, extract doc_ids from posting list
-            for docid, count in posting_dict.items():
-                if docid not in relevant_documents:
-                    # check if document is flagged as relevant (at least one occurrence of token_key)
-                    scores[docid] = 0
-                    print_log("discarded not relevant document : " + str(docid), 5)
+            for i in range(len(postingListObj.docids)):
+                if postingListObj.docids[i] not in related_documents:
+                    # check if document is flagged as related (at least one occurrence of token_key)
+                    scores[postingListObj.docids[i]] = 0
+                    print_log("discarded not relevant document : " + str(postingListObj.docids[i]), 5)
                     continue
 
                 # weigth of the token for the document relevance
                 w_t_d = 0
                 if self.index.scoring == "TFIDF":
-                    w_t_d = weight_tfidf(idf, term_freq=count)
+                    w_t_d = weight_tfidf(idf, term_freq=postingListObj.freqs[i])
                 elif self.index.scoring == "BM11":
-                    doc_len = self.fetch_doc_size(docid)
-                    w_t_d = weight_bm11(idf, term_freq=count, avg=self.doc_len_average, doc_len=doc_len)
+                    doc_len = self.fetch_doc_size(postingListObj.docids[i], search_file_algorithms)
+                    w_t_d = weight_bm11(idf, term_freq=postingListObj.freqs[i], avg=self.doc_len_average, doc_len=doc_len)
                 elif self.index.scoring == "BM15":
-                    w_t_d = weight_bm15(idf, term_freq=count)
+                    w_t_d = weight_bm15(idf, term_freq=postingListObj.freqs[i])
                 elif self.index.scoring == "BM25":
-                    doc_len = self.fetch_doc_size(docid)
-                    w_t_d = weight_bm25(idf, term_freq=count, avg=self.doc_len_average, doc_len=doc_len)
-                if docid in scores.keys():
+                    doc_len = self.fetch_doc_size(postingListObj.docids[i], search_file_algorithms)
+                    w_t_d = weight_bm25(idf, term_freq=postingListObj.freqs[i], avg=self.doc_len_average, doc_len=doc_len)
+                if postingListObj.docids[i] in scores.keys():
                     # add the weight to the document's score
-                    scores[docid] += w_t_d
+                    scores[postingListObj.docids[i]] += w_t_d
                 else:
                     # new relevant document, initialize its score
-                    scores[docid] = w_t_d
+                    scores[postingListObj.docids[i]] = w_t_d
         return scores
 
 
-def make_posting_candidates(raw_posting_lists):
+def make_posting_candidates(tokens, raw_posting_lists):
     # make a dictionary of posting lists {token_key : posting_list_dictionary}
     # where each posting_list_dictionary is a { docid: term_freq}
     res = {}
     # each pl is a string representing a posting list
-    for pl in raw_posting_lists:
-        token_key, posting_list = read_posting_list(pl)
+    for i in range(len(raw_posting_lists)):
+        token_key = tokens[i]
+        posting_list = create_posting_list_object(token_key,raw_posting_lists[i])
         res[token_key] = posting_list
     return res
 
@@ -222,8 +225,8 @@ def search_in_index(index_file, res_offset,  compression):
     # compressed_bytes = index_file.read()
     # decoded_doc_ids, decoded_freq = decode_posting_list(compressed_bytes, config[6], encoding_type="unary")
     # print(decoded_doc_ids)
-    offset_start = res_offset[0]
-    offset_stop = res_offset[1]
+    offset_start = int(res_offset[0])
+    offset_stop = int(res_offset[1])
     nbytes = offset_stop - offset_start
     index_file.seek(offset_start)
     compressed_bytes = index_file.read(nbytes)
@@ -260,6 +263,7 @@ def search_in_lexicon(lexicon, token, search_algorithm):
             line_pos, high, line = set_search_interval(lexicon, line_pos, token, element_separator,
                                                        step_size=step)
             if token == get_row_id(line, element_separator):
+                line_pos = high
                 break
         # precision scan
         while token != get_row_id(line, element_separator):
@@ -291,6 +295,64 @@ def search_in_lexicon(lexicon, token, search_algorithm):
 
     return [start_offset, stop_offset], docfreq
 
+def search_in_doc_stats_file(doc_stats_file, docid, search_algorithm):
+    '''
+    open the lexicon file given one query word, and return its entry
+    :param doc_stats_file: pointer to the doc stats file
+    :param docid: docid to look for
+    :param search_algorithm: user can choose any one search algorithm implemented
+    :return 1: offset interval <start,stop> relative to "token" for the lexicon file
+    :return 2: doc frequency: number of documents that contain the token at least once
+    '''
+
+    results = []
+    last_read_position = 0
+    line_pos = -1
+    line = ""
+    if search_algorithm == "ternary":
+        last_line_pos, last_line = get_last_line(doc_stats_file)
+        line_pos, line = ternary_search(doc_stats_file, start_position=last_read_position, target_key=docid,
+                                        delimiter=collection_separator, end_position=last_line_pos,
+                                        last_key=get_row_id(last_line, collection_separator), last_row=last_line)
+    elif search_algorithm == "skipping":
+        step = search_chunk_size_config
+        line_pos, high, line = set_search_interval(doc_stats_file, last_read_position, docid, collection_separator,
+                                                   step_size=step, id_is_a_String=False)
+        # skipping big chunks when reading lots of files, small chunks when search interval is smaller
+        while step >= 1:
+            step = step // 10
+            line_pos, high, line = set_search_interval(doc_stats_file, line_pos, docid, collection_separator,
+                                                       step_size=step, id_is_a_String=False)
+            if docid == get_row_id(line, collection_separator):
+                line_pos=high
+                break
+        # precision scan
+        while docid != get_row_id(line, collection_separator):
+            line_pos, line = next_GEQ_line(doc_stats_file, doc_stats_file.tell())
+            if doc_stats_file.tell() > high:
+                # termination condition: nothing found
+                line_pos = -1
+                break
+
+        if line_pos != -1:
+            # i have found the correct word
+            results.append(line.strip())
+            # since i enforced the query_terms list to be sorted, there is no need to look the same lines again
+            last_read_position = line_pos
+    else:
+        print_log("Critical error: cannot search without a search algorithm", 0)
+        return []
+
+    # search failed: return a blank
+    if line_pos == -1:
+        print_log("Cannot find token " + str(docid) + " in doc stats file", 2)
+        return [], -1
+
+    # search success: return offset and docfreq
+
+    doc_len = line.split(",")[2].strip()
+
+    return doc_len
 
 def read_lexicon_line(line):
     # lexicon line structure:
@@ -305,18 +367,15 @@ def preprocess_query_string(query_raw, stem_flag, stop_flag):
     return words
 
 
-def read_posting_list(posting_string):
+def create_posting_list_object(token_key, posting_string):
     # convert a line from the index file to a dictionary with the useful info
-    line = posting_string.split(posting_separator)
-    # key = line[0] ; content = line[1]
-    posting_dict = {}
-    for element in line[1].split(element_separator):
-        pair = element.split(docid_separator)
-        # docid = pair[0]
-        # freq = pair[1] # required casting to integer
-        posting_dict[pair[0]] = int(pair[1])
-    # return : token_id,dictionary of {docid: term_freq}
-    return line[0], posting_dict
+    posting_list_obj= postingList(token_key)
+    doc_id_list = posting_string.split()[0].split(",")
+    freq_list = posting_string.split()[1].split(",")
+    posting_list_obj.set_docids(doc_id_list)
+    posting_list_obj.set_freqs(freq_list)
+    # return : postingList class object
+    return posting_list_obj
 
 
 def weight_tfidf(idf, term_freq):

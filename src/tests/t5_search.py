@@ -5,9 +5,6 @@ from src.config import *
 from src.modules.InvertedIndex import load_from_disk, index_setup
 from src.modules.queryHandler import QueryHandler
 
-test_index_element = load_from_disk("indt4")
-
-
 def test_init_index(name, flags):
     test_index_element = load_from_disk(name)
     if test_index_element is None:
@@ -38,7 +35,7 @@ def test_search(words_list, file_search_algorithm):
     print(res)
 
 
-config = [300, query_processing_algorithm_config[0], scoring_function_config[0], 4, True, True]
+config = [300, query_processing_algorithm_config[0], scoring_function_config[0], 4, False, True]
 query_handler = test_init_index("t5", config)
 
 print("test query: between companies")

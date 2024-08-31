@@ -24,23 +24,34 @@ def get_last_line(file_pointer):
     file_pointer.seek(0, 2)  # 2 means SEEK_END
     end_pos = file_pointer.tell()  # tell() method returns the current file position in a file stream
     # Start from the end of the file
-    file_pointer.seek(-2, 2)  # last byte is a \n, so move it back by 2 chars
+    file_pointer.seek(end_pos - 3, 0) # last byte is a \n, so move it back by 2 chars
 
     pos = end_pos - 1  # The current position in the file
     while pos >= 0:  # hopefully it won't reach the beginning of the file
         byte = file_pointer.read(1)
+        if type(byte) is str:
+            byte = byte.encode('utf-8')
         if byte == b'\n':  # Check for newline character
             # Read the line after the newline character
             line_position = pos
             file_pointer.seek(line_position)
-            last_line = file_pointer.readline().decode().strip()  # Read the last line
+            last_line = file_pointer.readline()  # Read the last line
+            if type(last_line) is str:
+                last_line = last_line.strip()
+            else:
+                last_line = last_line.decode().strip()
             return line_position, last_line
-        file_pointer.seek(-2, 1)  # Move one byte backwards from the current position
+        pos = file_pointer.tell()
+        file_pointer.seek(pos-2, 0)  # Move one byte backwards from the current position
         pos -= 1
 
     # If no newline character is found, the file has one line
     file_pointer.seek(0)
-    last_line = file_pointer.readline().decode().strip()
+    last_line = file_pointer.readline()  # Read the last line
+    if type(last_line) is str:
+        last_line = last_line.strip()
+    else:
+        last_line = last_line.decode().strip()
     return 0, last_line  # The position of the first line
 
 
@@ -49,7 +60,7 @@ def get_row_id(row_string, key_delimiter):
     return row_string.split(key_delimiter)[0]
 
 
-def set_search_interval(file_pointer, start, key, key_delimiter, step_size):
+def set_search_interval(file_pointer, start, key, key_delimiter, step_size, id_is_a_String=True):
     # divide the file in chunks, and look for the correct one where to look for the key-word
     # @ param file_pointer : file where to look for
     # @ param start : position (byte number) where to start the search
@@ -61,11 +72,18 @@ def set_search_interval(file_pointer, start, key, key_delimiter, step_size):
     print_log("Reading the last line of the chunk", 8)
     print_log(top_row, 8)
     skipped = 0
-    while key > get_row_id(top_row, key_delimiter):
-        print_log("Reading between " + str(low) + " and " + str(high), 5)
-        low = high
-        high, top_row = next_GEQ_line(file_pointer, low + step_size)
-        skipped += 1
+    if id_is_a_String:
+        while key > get_row_id(top_row, key_delimiter):
+            print_log("Reading between " + str(low) + " and " + str(high), 5)
+            low = high
+            high, top_row = next_GEQ_line(file_pointer, low + step_size)
+            skipped += 1
+    else:
+        while int(key) > int(get_row_id(top_row, key_delimiter)):
+            print_log("Reading between " + str(low) + " and " + str(high), 5)
+            low = high
+            high, top_row = next_GEQ_line(file_pointer, low + step_size)
+            skipped += 1
     print_log("Skipped " + str(skipped) + " chunks", 5)
     return low, high, top_row
 
@@ -91,14 +109,19 @@ def next_GEQ_line(file_pointer, position):
     # set the pointer position
     file_pointer.seek(position)
 
-    if position == 0:  # special case, no need to skip positions
-        return 0, file_pointer.readline().decode()
+    if position == 0:# special case, no need to skip positions
+        line = file_pointer.readline()  # Read the last line
+        if type(line) is not str:
+            line = line.decode()
+        return 0, line
 
     # move the pointer to the next row start
     file_pointer.readline()
     # returns the position of the row start, and the read row
     line_start = file_pointer.tell()
-    line = file_pointer.readline().decode()
+    line = file_pointer.readline()
+    if type(line) is not str:
+        line = line.decode()
     print_log("found something: " + str(line[:8]) + "...", 7)
     return line_start, line
 
