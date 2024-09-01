@@ -13,7 +13,7 @@ i = 0
 
 def test_index(file_count, index_name):
     tic = time.perf_counter()
-    test_index_element = index_setup(index_name, True, True, "no", 3, 0, 0, 0)
+    test_index_element = index_setup(index_name, True, True, "no", 3, 0, 0)
     if test_index_element.is_ready():
         test_index_element.scan_dataset(file_count, False)
     else:

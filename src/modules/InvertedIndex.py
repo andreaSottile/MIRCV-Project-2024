@@ -48,7 +48,6 @@ class InvertedIndex:
         self.topk = 0
         self.algorithm = member_blank_tag
         self.scoring = member_blank_tag
-        self.evaluation = member_blank_tag
         self.collection_statistics_path = file_blank_tag
         self.index_file_path = file_blank_tag
         self.lexicon_path = file_blank_tag
@@ -114,7 +113,6 @@ class InvertedIndex:
             config_file.write(str(self.topk) + chunk_line_separator)
             config_file.write(str(self.algorithm) + chunk_line_separator)
             config_file.write(str(self.scoring) + chunk_line_separator)
-            config_file.write(str(self.evaluation) + chunk_line_separator)
 
             self.collection_statistics_path = index_folder_path + self.name + "/" + "stats" + file_format
             self.index_file_path = index_folder_path + self.name + "/" + "index" + file_format
@@ -159,7 +157,6 @@ class InvertedIndex:
                         self.topk = int(readline_with_strip(config_file))
                         self.algorithm = readline_with_strip(config_file)
                         self.scoring = readline_with_strip(config_file)
-                        self.evaluation = readline_with_strip(config_file)
 
                         self.collection_statistics_path = readline_with_strip(config_file)
                         self.index_file_path = readline_with_strip(config_file)
@@ -442,7 +439,7 @@ def load_from_disk(name):
         return None
 
 
-def index_setup(name, stemming_flag, stop_words_flag, compression_flag, k, join_algorithm, scoring_f, eval_f):
+def index_setup(name, stemming_flag, stop_words_flag, compression_flag, k, join_algorithm, scoring_f):
     print_log("setup for new index", 4)
     ind = InvertedIndex()
     print_log("created index", 4)
@@ -454,7 +451,6 @@ def index_setup(name, stemming_flag, stop_words_flag, compression_flag, k, join_
     ind.topk = k  # number of results to return
     ind.algorithm = join_algorithm  # conjunctive or disjunctive
     ind.scoring = scoring_f  # string, see config
-    ind.evaluation = eval_f  # string, see config
     print_log("setup completed, saving to disk", 3)
     ind.save_on_disk()
     print_log("saved complete", 4)

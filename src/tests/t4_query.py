@@ -25,7 +25,7 @@ def test_index(query_string, search_function, index_name, flags):
     if test_index_element is None:
         test_index_element = index_setup(index_name, stemming_flag=flags[4], stop_words_flag=flags[5],
                                          compression_flag="no",
-                                         k=flags[3], join_algorithm=flags[1], scoring_f=flags[2], eval_f=0)
+                                         k=flags[3], join_algorithm=flags[1], scoring_f=flags[2])
     if test_index_element.is_ready():
         if not test_index_element.content_check(int(flags[0] / 2)):
             test_index_element.scan_dataset(flags[0], delete_after_compression=False)
