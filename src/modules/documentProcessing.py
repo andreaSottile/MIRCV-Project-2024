@@ -26,6 +26,7 @@ import pandas as pd
 from src.config import collection_path_config, limit_input_rows_config
 from src.modules.utils import print_log
 
+
 def open_dataset(count_limit=-1, index=None, process_function=None):
     if count_limit > 0 and 0 < limit_input_rows_config < count_limit:
         count_limit = limit_input_rows_config

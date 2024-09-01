@@ -45,7 +45,6 @@ def decode_posting_list(compressed_bytes, compression="no"):
     The decode_posting_list function first reads the binary data and converts it to a string of bits.
     :param compression:
     :param compressed_bytes:
-    :param encoding_type:
     :return: list_doc_id
     '''
     if compression != "no":
@@ -95,51 +94,6 @@ def decode_posting_list(compressed_bytes, compression="no"):
     # return list_doc_id, decoded_freqs
 
 
-def decode_posting_list_old(compressed_bytes, compression=False, encoding_type="unary"):
-    '''
-    The decode_posting_list function first reads the binary data and converts it to a string of bits.
-    :param compression:
-    :param compressed_bytes:
-    :param encoding_type:
-    :return: list_doc_id
-    '''
-    if compression:
-        # Convert the bytes back into a bit string
-        bit_stream = ''.join(f'{byte:08b}' for byte in compressed_bytes)
-        print(bit_stream)
-
-        # Step 1: Decode the number of doc IDs
-        if encoding_type == "unary":
-            num_docs, remaining_bit_stream = decode_unary(bit_stream, limit=1)
-            print(num_docs)
-            print(remaining_bit_stream)
-        elif encoding_type == "gamma":
-            num_docs, remaining_bit_stream = decode_gamma(bit_stream, limit=1)
-
-        num_docs = num_docs[0]  # We expect a single value for num_docs
-
-        # Step 2: Decode the doc IDs
-        if encoding_type == "unary":
-            decoded_doc_ids, remaining_bit_stream = decode_unary(remaining_bit_stream, limit=num_docs)
-            decoded_freqs, _ = decode_unary(remaining_bit_stream, limit=num_docs)
-        elif encoding_type == "gamma":
-            decoded_doc_ids, remaining_bit_stream = decode_gamma(remaining_bit_stream, limit=num_docs)
-            decoded_freqs, _ = decode_gamma(remaining_bit_stream, limit=num_docs)
-    else:
-        posting_list = compressed_bytes.split()
-        decoded_doc_ids = map(int, posting_list[0].split(","))
-        decoded_freqs = posting_list[1].split(",")
-    # Convert the gaps back to doc IDs
-    list_doc_id = []
-    previous_doc_id = 0
-    for gap in decoded_doc_ids:
-        doc_id = previous_doc_id + gap
-        list_doc_id.append(doc_id)
-        previous_doc_id = doc_id
-
-    return list_doc_id, decoded_freqs
-
-
 def decode_unary(bit_stream):
     '''
     The decode_unary function processes the bit stream by counting consecutive 1s followed by a 0 to determine the
@@ -159,27 +113,6 @@ def decode_unary(bit_stream):
             count = 0
         i += 1
     return gaps
-
-
-def decode_unary_old(bit_stream, limit=None):
-    '''
-    The decode_unary function processes the bit stream by counting consecutive 1s followed by a 0 to determine the
-    original number (gap).
-
-    :param bit_stream:
-    :return: gaps
-    '''
-    gaps = []
-    count = 0
-    i = 0
-    while i < len(bit_stream) and (limit is None or len(gaps) < limit):
-        if bit_stream[i] == '1':
-            count += 1
-        elif bit_stream[i] == '0':
-            gaps.append(count + 1)
-            count = 0
-        i += 1
-    return gaps, bit_stream[i:]
 
 
 def decode_gamma(bit_stream):
@@ -213,53 +146,11 @@ def decode_gamma(bit_stream):
                 offset = bit_stream[i:i + length]
                 i += length
                 if offset:
-                    gap = (1 << (length)) + int(offset, 2)
+                    gap = (1 << length) + int(offset, 2)
                 else:
-                    gap = 1 << (length)
+                    gap = 1 << length
                 gaps.append(gap)
             else:
-                gap = 1 << (length)
+                gap = 1 << length
                 gaps.append(gap)
     return gaps
-
-
-def decode_gamma_old(bit_stream, limit=None):
-    '''The decode_gamma function interprets the unary-coded length and the binary offset.
-        It reconstructs the original number (gap) by combining the offset with the length.
-
-        number 4 will be 110.00
-        First part: Unary encoding of the length of the binary representation
-                    binary of number 4 is 100 so its length is 3 bit, the Unary of 3 is 110
-        Second part: Offset, i.e., the binary representation without the most significant bit
-                     binary of number 4 is 100 so its representation without the most significant bit is 00
-
-        Padding isn’t an issue because:
-            The decoder processes the bit stream in a specific pattern (e.g., identifying unary or gamma encodings).
-            The padding will only be at the end, so it doesn’t interfere with valid encodings.
-            In decode_gamma, once the bit stream is fully processed, any remaining bits (which would only be ones) are simply ignored.
-    '''
-    gaps = []
-    i = 0
-    while i < len(bit_stream) and (limit is None or len(gaps) < limit):
-        length = 0
-        padding = True
-        while i < len(bit_stream) and bit_stream[i] == '1':
-            length += 1
-            i += 1
-        if i < len(bit_stream) and bit_stream[i] == '0':
-            i += 1
-            padding = False
-
-        if not padding:
-            if length > 0:
-                offset = bit_stream[i:i + length]
-                i += length
-                if offset:
-                    gap = (1 << (length)) + int(offset, 2)
-                else:
-                    gap = 1 << (length)
-                gaps.append(gap)
-            else:
-                gap = 1 << (length)
-                gaps.append(gap)
-    return gaps, bit_stream[i:]

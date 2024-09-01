@@ -24,7 +24,7 @@ def get_last_line(file_pointer):
     file_pointer.seek(0, 2)  # 2 means SEEK_END
     end_pos = file_pointer.tell()  # tell() method returns the current file position in a file stream
     # Start from the end of the file
-    file_pointer.seek(end_pos - 3, 0) # last byte is a \n, so move it back by 2 chars
+    file_pointer.seek(end_pos - 3, 0)  # last byte is a \n, so move it back by 2 chars
 
     pos = end_pos - 1  # The current position in the file
     while pos >= 0:  # hopefully it won't reach the beginning of the file
@@ -42,7 +42,7 @@ def get_last_line(file_pointer):
                 last_line = last_line.decode().strip()
             return line_position, last_line
         pos = file_pointer.tell()
-        file_pointer.seek(pos-2, 0)  # Move one byte backwards from the current position
+        file_pointer.seek(pos - 2, 0)  # Move one byte backwards from the current position
         pos -= 1
 
     # If no newline character is found, the file has one line
@@ -109,7 +109,7 @@ def next_GEQ_line(file_pointer, position):
     # set the pointer position
     file_pointer.seek(position)
 
-    if position == 0:# special case, no need to skip positions
+    if position == 0:  # special case, no need to skip positions
         line = file_pointer.readline()  # Read the last line
         if type(line) is not str:
             line = line.decode()

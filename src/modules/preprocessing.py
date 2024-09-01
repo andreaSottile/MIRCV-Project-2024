@@ -1,6 +1,5 @@
 from collections import Counter
 
-import unicodedata
 import re
 import nltk
 from nltk.stem import PorterStemmer

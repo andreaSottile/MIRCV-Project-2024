@@ -12,7 +12,6 @@ you should implement the nextGEQ() operation in your posting interface, and
 you should implement a dynamic pruning algorithm.
 '''
 import math
-import os
 
 from src.config import *
 from src.modules.compression import decode_posting_list
@@ -98,7 +97,7 @@ class QueryHandler:
         :return:
         '''
         res = []
-        doc_freq_array=[]
+        doc_freq_array = []
         if not self.index.is_ready():
             print_log("Calling Search on unknown index", 0)
             print_log(self.index.index_file_path, 0)
@@ -193,12 +192,14 @@ class QueryHandler:
                     w_t_d = weight_tfidf(idf, term_freq=postingListObj.freqs[i])
                 elif self.index.scoring == "BM11":
                     doc_len = self.fetch_doc_size(postingListObj.docids[i], search_file_algorithms)
-                    w_t_d = weight_bm11(idf, term_freq=postingListObj.freqs[i], avg=self.doc_len_average, doc_len=doc_len)
+                    w_t_d = weight_bm11(idf, term_freq=postingListObj.freqs[i], avg=self.doc_len_average,
+                                        doc_len=doc_len)
                 elif self.index.scoring == "BM15":
                     w_t_d = weight_bm15(idf, term_freq=postingListObj.freqs[i])
                 elif self.index.scoring == "BM25":
                     doc_len = self.fetch_doc_size(postingListObj.docids[i], search_file_algorithms)
-                    w_t_d = weight_bm25(idf, term_freq=postingListObj.freqs[i], avg=self.doc_len_average, doc_len=doc_len)
+                    w_t_d = weight_bm25(idf, term_freq=postingListObj.freqs[i], avg=self.doc_len_average,
+                                        doc_len=doc_len)
                 if postingListObj.docids[i] in scores.keys():
                     # add the weight to the document's score
                     scores[postingListObj.docids[i]] += w_t_d
@@ -215,12 +216,12 @@ def make_posting_candidates(tokens, raw_posting_lists):
     # each pl is a string representing a posting list
     for i in range(len(raw_posting_lists)):
         token_key = tokens[i]
-        posting_list = create_posting_list_object(token_key,raw_posting_lists[i])
+        posting_list = create_posting_list_object(token_key, raw_posting_lists[i])
         res[token_key] = posting_list
     return res
 
 
-def search_in_index(index_file, res_offset,  compression):
+def search_in_index(index_file, res_offset, compression):
     # index_file.seek(7802)
     # compressed_bytes = index_file.read()
     # decoded_doc_ids, decoded_freq = decode_posting_list(compressed_bytes, config[6], encoding_type="unary")
@@ -295,6 +296,7 @@ def search_in_lexicon(lexicon, token, search_algorithm):
 
     return [start_offset, stop_offset], docfreq
 
+
 def search_in_doc_stats_file(doc_stats_file, docid, search_algorithm):
     '''
     open the lexicon file given one query word, and return its entry
@@ -324,7 +326,7 @@ def search_in_doc_stats_file(doc_stats_file, docid, search_algorithm):
             line_pos, high, line = set_search_interval(doc_stats_file, line_pos, docid, collection_separator,
                                                        step_size=step, id_is_a_String=False)
             if docid == get_row_id(line, collection_separator):
-                line_pos=high
+                line_pos = high
                 break
         # precision scan
         while docid != get_row_id(line, collection_separator):
@@ -354,6 +356,7 @@ def search_in_doc_stats_file(doc_stats_file, docid, search_algorithm):
 
     return doc_len
 
+
 def read_lexicon_line(line):
     # lexicon line structure:
     # token_id;doc_freq;offset_in_index
@@ -369,7 +372,7 @@ def preprocess_query_string(query_raw, stem_flag, stop_flag):
 
 def create_posting_list_object(token_key, posting_string):
     # convert a line from the index file to a dictionary with the useful info
-    posting_list_obj= postingList(token_key)
+    posting_list_obj = postingList(token_key)
     doc_id_list = posting_string.split()[0].split(",")
     freq_list = posting_string.split()[1].split(",")
     posting_list_obj.set_docids(doc_id_list)

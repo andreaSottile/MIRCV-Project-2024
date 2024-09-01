@@ -446,15 +446,15 @@ def index_setup(name, stemming_flag, stop_words_flag, compression_flag, k, join_
     print_log("setup for new index", 4)
     ind = InvertedIndex()
     print_log("created index", 4)
-    ind.rename(name) # string
+    ind.rename(name)  # string
     print_log("setting flags", 4)
-    ind.skip_stemming = stemming_flag # boolean
-    ind.allow_stop_words = stop_words_flag # boolean
-    ind.compression = compression_flag # string, see config
-    ind.topk = k    # number of results to return
-    ind.algorithm = join_algorithm # conjunctive or disjunctive
-    ind.scoring = scoring_f # string, see config
-    ind.evaluation = eval_f # string, see config
+    ind.skip_stemming = stemming_flag  # boolean
+    ind.allow_stop_words = stop_words_flag  # boolean
+    ind.compression = compression_flag  # string, see config
+    ind.topk = k  # number of results to return
+    ind.algorithm = join_algorithm  # conjunctive or disjunctive
+    ind.scoring = scoring_f  # string, see config
+    ind.evaluation = eval_f  # string, see config
     print_log("setup completed, saving to disk", 3)
     ind.save_on_disk()
     print_log("saved complete", 4)
