@@ -5,13 +5,13 @@ VARIABLES TAGGED WITH "EDIT HERE" REQUIRE MANUAL CONFIGURATION ON EACH MACHINE
 ''' LOCAL PATHS '''
 # path lorenzo
 # EDIT HERE
-#full_collection_compressed = "D:/Repositories/mircv/dataset/collection.tar.gz"
-full_collection_compressed = "/Users/gianluca.cometa/Documents/mircv_dataset/collection.tar.gz"
+full_collection_compressed = "D:/Repositories/mircv/dataset/collection.tar.gz"
+# full_collection_compressed = "/Users/gianluca.cometa/Documents/mircv_dataset/collection.tar.gz"
 # EDIT HERE
-#test_collection_uncompressed = "D:/Repositories/mircv/dataset/test.tsv"
+test_collection_uncompressed = "D:/Repositories/mircv/dataset/test.tsv"
 # EDIT HERE
-#full_collection_uncompressed = "D:/Repositories/mircv/dataset/collection.tsv"
-full_collection_uncompressed = "/Users/gianluca.cometa/Documents/mircv_dataset/collection.tsv"
+full_collection_uncompressed = "D:/Repositories/mircv/dataset/collection.tsv"
+# full_collection_uncompressed = "/Users/gianluca.cometa/Documents/mircv_dataset/collection.tsv"
 
 '''collection_path : this is the LOCAL path to the dataset.'''
 # EDIT HERE
@@ -19,9 +19,11 @@ collection_path_config = full_collection_compressed
 
 '''index folder: this folder is going to contain all the files to work with inverted indexes'''
 # EDIT HERE
-index_config_path = "/Users/gianluca.cometa/Documents/mircv_dataset/index_info_"  # file name is going to be added at the end
+index_config_path = "D:/Repositories/mircv/dataset/index_info_"  # file name is going to be added at the end
+# index_config_path = "/Users/gianluca.cometa/Documents/mircv_dataset/index_info_"  # file name is going to be added at the end
 # EDIT HERE
-index_folder_path = "/Users/gianluca.cometa/Documents/mircv_dataset/index"  # folder is going to contain several files for each index
+index_folder_path = "D:/Repositories/mircv/dataset/index"  # folder is going to contain several files for each index
+# index_folder_path = "/Users/gianluca.cometa/Documents/mircv_dataset/index"  # folder is going to contain several files for each index
 
 '''
 Dataset Specification. You must use the MSMARCO Passages collection1 available on
@@ -48,15 +50,24 @@ implement conjunctive and disjunctive query processing algorithms.
 Scoring Function. You should implement the BM25 or other scoring functions such as
 those based on language models.
 '''
-# options available for evaluation methods
-evaluation_method_config = ["trec_dl_2019_queries", "trec_dl_2019_qrels", "trec_dl_2020_queries", "trec_dl_2020_qrels"]
 '''
 Evalution 
 Your program must include an evaluation of the systems using a standard
 collection such as the TREC DL 2019 queries and TREC DL 2019 qrels, or the
 TREC DL 2020 queries and TREC DL 2020 qrels.
 '''
-
+# EDIT HERE
+# qrel 2019
+evaluation_trec_qrel_2019_path = "D:/Repositories/mircv/dataset/trec/2019qrels-pass.txt"
+# EDIT HERE
+# qrel 2020
+evaluation_trec_qrel_2020_path = "D:/Repositories/mircv/dataset/trec/2020qrels-pass.txt"
+# EDIT HERE
+# queries 2019
+evaluation_trec_queries_2019_path = "D:/Repositories/mircv/dataset/trec/msmarco-test2019-queries.tsv"
+# EDIT HERE
+# queries 2020
+evaluation_trec_queries_2020_path = "D:/Repositories/mircv/dataset/trec/msmarco-test2020-queries.tsv"
 """
 STRING FORMAT CONFIG: list of useful variables to easily remember string separators
 """
@@ -76,19 +87,6 @@ This function is used to properly document and debug the whole project.
 '''
 # EDIT HERE
 verbosity_config = 5
-
-
-# 0 : only errors
-# 1 : processes and modules
-# 2 : critical blocks
-# 3 : function calls
-# 4 : row by row (debug)
-# 5 : loop iterations
-def print_log(msg, priority=0):
-    global verbosity_config
-    if priority <= verbosity_config:
-        print(msg)
-
 
 '''
 TEST MODE WITH LIMITED ROWS
@@ -120,11 +118,18 @@ B is usually 0.75
 BM_k_one = 1.2
 BM25_b = 0.75
 
-
+'''
+COMPRESSION OPTIONS 
+'''
+compression_choices_config = ["no", "unary", "gamma"]
 '''
 QUERY PARAMETERS
 query_step_size_config : how many rows the query is supposed to read at once
 '''
+# options for search algoritms
+search_into_file_algorithms = ["ternary", "skipping"]
+# other parameters
 # EDIT HERE
 query_step_size_config = 500
-
+# EDIT HERE
+search_chunk_size_config = 10000  # char size for a search chunk
