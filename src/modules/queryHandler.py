@@ -24,18 +24,21 @@ def get_top_k(k, results):
     # rearrange a list of QueryResult and cut it to k elements
     print_log("Results list:", 4)
     print_log(results, 4)
-    print_log("ordering the results list", 4)
     result_list = []
-    for key, score in results.items():
-        result_list.append((key, score))
-    # order in descending order with the reverse flag
-    ordered = sorted(result_list, key=lambda x: x[1], reverse=True)
-    if len(ordered) > k:
-        print_log("extracted top k elements of relevant documents", 4)
-        return ordered[:k]
+    if results != {}:
+        print_log("ordering the results list", 4)
+        for key, score in results.items():
+            result_list.append((key, score))
+        # order in descending order with the reverse flag
+        ordered = sorted(result_list, key=lambda x: x[1], reverse=True)
+        if len(ordered) > k:
+            print_log("extracted top k elements of relevant documents", 4)
+            return ordered[:k]
+        else:
+            print_log("relevant documents are less than k", 2)
+            return ordered
     else:
-        print_log("relevant documents are less than k", 2)
-        return ordered
+        return result_list
 
 
 class QueryHandler:
@@ -175,37 +178,38 @@ class QueryHandler:
         print(posting_lists)
         for token_key, postingListObj in posting_lists.items():
             # log ( N of docs in the collection / N of relevant docs )
-            idf = math.log(self.num_docs / len(postingListObj.docids))
-            print_log("calculated IDF : " + str(idf), 3)
+            if postingListObj.size > 0:
+                idf = math.log(self.num_docs / len(postingListObj.docids))
+                print_log("calculated IDF : " + str(idf), 3)
 
-            # read posting list, extract doc_ids from posting list
-            for i in range(len(postingListObj.docids)):
-                if postingListObj.docids[i] not in related_documents:
-                    # check if document is flagged as related (at least one occurrence of token_key)
-                    scores[postingListObj.docids[i]] = 0
-                    print_log("discarded not relevant document : " + str(postingListObj.docids[i]), 5)
-                    continue
+                # read posting list, extract doc_ids from posting list
+                for i in range(len(postingListObj.docids)):
+                    if postingListObj.docids[i] not in related_documents:
+                        # check if document is flagged as related (at least one occurrence of token_key)
+                        scores[postingListObj.docids[i]] = 0
+                        print_log("discarded not relevant document : " + str(postingListObj.docids[i]), 5)
+                        continue
 
-                # weigth of the token for the document relevance
-                w_t_d = 0
-                if self.index.scoring == "TFIDF":
-                    w_t_d = weight_tfidf(idf, term_freq=postingListObj.freqs[i])
-                elif self.index.scoring == "BM11":
-                    doc_len = self.fetch_doc_size(postingListObj.docids[i], search_file_algorithms)
-                    w_t_d = weight_bm11(idf, term_freq=postingListObj.freqs[i], avg=self.doc_len_average,
-                                        doc_len=doc_len)
-                elif self.index.scoring == "BM15":
-                    w_t_d = weight_bm15(idf, term_freq=postingListObj.freqs[i])
-                elif self.index.scoring == "BM25":
-                    doc_len = self.fetch_doc_size(postingListObj.docids[i], search_file_algorithms)
-                    w_t_d = weight_bm25(idf, term_freq=postingListObj.freqs[i], avg=self.doc_len_average,
-                                        doc_len=doc_len)
-                if postingListObj.docids[i] in scores.keys():
-                    # add the weight to the document's score
-                    scores[postingListObj.docids[i]] += w_t_d
-                else:
-                    # new relevant document, initialize its score
-                    scores[postingListObj.docids[i]] = w_t_d
+                    # weigth of the token for the document relevance
+                    w_t_d = 0
+                    if self.index.scoring == "TFIDF":
+                        w_t_d = weight_tfidf(idf, term_freq=postingListObj.freqs[i])
+                    elif self.index.scoring == "BM11":
+                        doc_len = self.fetch_doc_size(postingListObj.docids[i], search_file_algorithms)
+                        w_t_d = weight_bm11(idf, term_freq=postingListObj.freqs[i], avg=self.doc_len_average,
+                                            doc_len=doc_len)
+                    elif self.index.scoring == "BM15":
+                        w_t_d = weight_bm15(idf, term_freq=postingListObj.freqs[i])
+                    elif self.index.scoring == "BM25":
+                        doc_len = self.fetch_doc_size(postingListObj.docids[i], search_file_algorithms)
+                        w_t_d = weight_bm25(idf, term_freq=postingListObj.freqs[i], avg=self.doc_len_average,
+                                            doc_len=doc_len)
+                    if postingListObj.docids[i] in scores.keys():
+                        # add the weight to the document's score
+                        scores[postingListObj.docids[i]] += w_t_d
+                    else:
+                        # new relevant document, initialize its score
+                        scores[postingListObj.docids[i]] = w_t_d
         return scores
 
 
@@ -373,10 +377,11 @@ def preprocess_query_string(query_raw, stem_flag, stop_flag):
 def create_posting_list_object(token_key, posting_string):
     # convert a line from the index file to a dictionary with the useful info
     posting_list_obj = postingList(token_key)
-    doc_id_list = posting_string.split()[0].split(",")
-    freq_list = posting_string.split()[1].split(",")
-    posting_list_obj.set_docids(doc_id_list)
-    posting_list_obj.set_freqs(freq_list)
+    if posting_string != '':
+        doc_id_list = posting_string.split()[0].split(",")
+        freq_list = posting_string.split()[1].split(",")
+        posting_list_obj.set_docids(doc_id_list)
+        posting_list_obj.set_freqs(freq_list)
     # return : postingList class object
     return posting_list_obj
 

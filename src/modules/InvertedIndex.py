@@ -329,7 +329,16 @@ class InvertedIndex:
             print_log("compression finished", priority=3)
             if delete_after_compression:
                 print_log("deleted uncompressed index file", priority=1)
-                os.remove(self.index_file_path)
+                for filename in os.listdir(index_folder_path + self.name):
+                    # Verifica se il nome del file inizia con "chunk"
+                    if filename.startswith("chunk"):
+                        file_path = os.path.join(index_folder_path + self.name, filename)
+                        try:
+                            # Cancella il file
+                            os.remove(file_path)
+                            print(f"File cancellato: {file_path}")
+                        except Exception as e:
+                            print(f"Errore nel cancellare {file_path}: {e}")
         self.save_on_disk()
 
 

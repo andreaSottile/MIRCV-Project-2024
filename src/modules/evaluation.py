@@ -13,18 +13,124 @@ EVALUATION PHASE
 6 - repeat for each query at step 1
 
 '''
+
 import pandas as pd
+from evaluate import load
+
+import time
 
 from src.config import *
+
 from src.modules.InvertedIndex import load_from_disk, index_setup
 from src.modules.queryHandler import QueryHandler
+
+
+
+qrel_test = {
+    "query": [0],
+    "q0": ["q0"],
+    "docid": ["doc_1"],
+    "rel": [2]
+}
+run_test = {
+    "query": [0, 0],
+    "q0": ["q0", "q0"],
+    "docid": ["doc_2", "doc_1"],
+    "rank": [0, 1],
+    "score": [1.5, 1.2],
+    "system": ["test", "test"]
+}
+
+trec_eval = load("trec_eval")
+results_test = trec_eval.compute(references=[qrel_test], predictions=[run_test])
+print("ciao")
+
+
+
+def evaluate_on_trec(run_dict):
+    '''
+    This function take as an argument a dict related to a query with this structure:
+        query (int): Query ID.
+        q0 (str): Literal "q0".
+        docid (str): Document ID.
+        rank (int): Rank of document.
+        score (float): Score of document.
+        system (str): Tag for current run.
+
+        Example:
+            run = {
+                    "query": [0, 0],
+                    "q0": ["q0", "q0"],
+                    "docid": ["doc_2", "doc_1"],
+                    "rank": [0, 1],
+                    "score": [1.5, 1.2],
+                    "system": ["test", "test"]
+                 }
+    :param run_dict: dict on a single retrieval run.
+    :return:
+    '''
+    # Structure of QREL txt file qid, “Q0”, docid, rating
+    qrel = pd.read_csv(r"C:\Users\andre\Desktop\AIDE\mircv\2020qrels-pass.txt", sep=' ',
+                       names=["query", "q0", "docid", "rel"])
+    qrel["q0"] = "q0"
+    qrel["docid"] = qrel["docid"].astype(str)
+    qrel = qrel.to_dict(orient="list")
+    results={}
+    if run_dict['query'][0] in qrel['query']:
+        trec_eval = load("trec_eval")
+        results = trec_eval.compute(references=[qrel], predictions=[run_dict])
+    return results
+
+
+def create_run_dict(qid, name, docID_score):
+    """
+    This function creates the run_dict with this structure:
+        predictions (dict): a single retrieval run.
+        query (int): Query ID.
+        q0 (str): Literal "q0".
+        docid (str): Document ID.
+        rank (int): Rank of document.
+        score (float): Score of document.
+        system (str): Tag for current run.
+
+    Example of a simple dict:
+        run = {
+        "query": [0, 0],
+        "q0": ["q0", "q0"],
+        "docid": ["doc_2", "doc_1"],
+        "rank": [0, 1],
+        "score": [1.5, 1.2],
+        "system": ["test", "test"]
+        }
+    :param qid:
+    :param name:
+    :param docID_score:
+    :return:
+    """
+    run_dict = {}
+    run_dict["query"] = []
+    run_dict["q0"] = []
+    run_dict["docid"] = []
+    run_dict["rank"] = []
+    run_dict["score"] = []
+    run_dict["system"] = []
+    i = 0
+    for doc_id, score in docID_score:
+        run_dict["query"].append(int(qid))
+        run_dict["q0"].append("q0")
+        run_dict["docid"].append(doc_id)
+        run_dict["rank"].append(i)
+        run_dict["score"].append(score)
+        run_dict["system"].append(name)
+        i += 1
+    return run_dict
 
 
 def read_query_file(file_pointer):
     line = file_pointer.readline()
     if line == "":
         return -1, ""
-    content = line.split(" ")
+    content = line.split("\t")
     query_id = content[0]
     query_string = " ".join(content[1:])
     return query_id, query_string
@@ -76,34 +182,34 @@ index_num = 1
 name_template = "eval_index_" + str(size_limit) + "_"
 
 # config : name, query_alg, scoring_f, k, stem_skip, allow_stopword, compression
-confing_set = []
+config_set = []
 for query_algorithm in query_processing_algorithm_config:
     for scoring_function in scoring_function_config:
         for topk in k_returned_results_config:
             for compression in compression_choices_config:
-                confing_set.append(
+                config_set.append(
                     [name_template + str(index_num), query_algorithm, scoring_function, topk, True, True, compression])
-                confing_set.append(
+                config_set.append(
                     [name_template + str(index_num + 1), query_algorithm, scoring_function, topk, False, True,
                      compression])
-                confing_set.append(
+                config_set.append(
                     [name_template + str(index_num + 2), query_algorithm, scoring_function, topk, True, False,
                      compression])
-                confing_set.append(
+                config_set.append(
                     [name_template + str(index_num + 3), query_algorithm, scoring_function, topk, False, False,
                      compression])
                 index_num += 4
 
 # VERY DANGEROUS EXECUTION:
-# for cfg in confing_set:
+# for cfg in config_set:
 #    query_handlers_catalogue.append(prepare_index(cfg))
-
-query_handlers_catalogue.append(prepare_index(confing_set[0:1]))
+for config in config_set[-2:-1]:
+    query_handlers_catalogue.append(prepare_index(config))
 
 print("TREC 2019 EVALUATION")
-relevance_dataframe = load_data(evaluation_trec_qrel_2019_path)
 query_file = open(evaluation_trec_queries_2019_path, "r")
 
+trec_score_dicts_list=[]
 query_count = 0
 next_qid, next_query = read_query_file(query_file)
 while True:
@@ -111,9 +217,56 @@ while True:
     for handler in query_handlers_catalogue:
         for algorithm in search_into_file_algorithms:
             result = handler.query(next_query, algorithm)
-            trec_score = relevance_score(relevance_dataframe, next_qid, result)
+            # result have this structure [(docid, score),....(docid, score)]
+            # example: [('116', 5.891602731662223), ('38', 0), ('221', 0), ('297', 0)]
+            run_dict = create_run_dict(next_qid, handler.index.name, result)
+            trec_score_dict ={}
+            #if "paul" in next_query:
+            #    print("ciao")
+            if len(run_dict['query']) > 0:
+                trec_score_dict = evaluate_on_trec(run_dict)
+            trec_score_dict["name"] = handler.index.name
+            trec_score_dict["qid"] = next_qid
+            trec_score_dicts_list.append(trec_score_dict)
+            # trec_score = relevance_score(relevance_dataframe, next_qid, result)
 
     # TODO : vedere il confronto tra tutti
 
     query_count += 1
     next_qid, next_query = read_query_file(query_file)
+    if next_qid == -1:
+        break
+
+
+def test_init_index(name, flags):
+    test_index_element = load_from_disk(name)
+    if test_index_element is None:
+        test_index_element = index_setup(name, stemming_flag=flags[4], stop_words_flag=flags[5],
+                                         compression_flag="no",
+                                         k=flags[3], join_algorithm=flags[1], scoring_f=flags[2])
+    if test_index_element.is_ready():
+        if not test_index_element.content_check(int(flags[0] / 2)):
+            test_index_element.scan_dataset(flags[0], delete_after_compression=False)
+    else:
+        print("index not ready")
+    return QueryHandler(test_index_element)
+
+
+def test_search(words_list, file_search_algorithm):
+    global query_handler
+    print(" --  Searching with " + file_search_algorithm + "  -- ")
+
+    print(words_list)
+    tic = time.perf_counter()
+
+    # TEST QUERY
+
+    res = query_handler.query(words_list, search_file_algorithms=file_search_algorithm)
+
+    toc = time.perf_counter()
+    print(" -- Query completed in " + str(toc - tic) + "ms-- ")
+    print(res)
+
+
+#config = [300, query_processing_algorithm_config[0], scoring_function_config[0], 4, False, True]
+#query_handler = test_init_index("t_eval", config)
