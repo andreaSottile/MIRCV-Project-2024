@@ -83,6 +83,11 @@ def open_dataset(count_limit=-1, index=None, process_function=None):
 
 
 def process_dataset_row(d_id, d_no, d_text, process_function=None, index=None):
+    if d_id % 100000 == 0:
+        print_log("processed " + str(d_id), priority=1)
+    else:
+        if d_id % 10000 == 0:
+            print_log("processed " + str(d_id), priority=2)
     if d_no:
         print_log("processing row " + str(d_id), priority=5)
         if d_text:

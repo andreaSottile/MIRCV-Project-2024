@@ -24,8 +24,7 @@ from src.config import *
 from src.modules.InvertedIndex import load_from_disk, index_setup
 from src.modules.queryHandler import QueryHandler
 
-
-
+'''
 qrel_test = {
     "query": [0],
     "q0": ["q0"],
@@ -44,7 +43,7 @@ run_test = {
 trec_eval = load("trec_eval")
 results_test = trec_eval.compute(references=[qrel_test], predictions=[run_test])
 print("ciao")
-
+'''
 
 
 def evaluate_on_trec(run_dict):
@@ -75,7 +74,7 @@ def evaluate_on_trec(run_dict):
     qrel["q0"] = "q0"
     qrel["docid"] = qrel["docid"].astype(str)
     qrel = qrel.to_dict(orient="list")
-    results={}
+    results = {}
     if run_dict['query'][0] in qrel['query']:
         trec_eval = load("trec_eval")
         results = trec_eval.compute(references=[qrel], predictions=[run_dict])
@@ -156,9 +155,23 @@ def search_relevance(df, qid, docid):
 
 def prepare_index(args):
     global size_limit
-    test_index_element = load_from_disk(args[0])
+
+    # name building: makes clear which indexing flag is used, to avoid repeating indexing with the same flags
+    name = args[0] + "_" + str(size_limit) + "_"
+    if args[6] == "no":
+        name += "uncompressed_"
+    else:
+        name += args[6] + "_"
+    if args[5]:
+        name += "stopwords_"
+    if args[4]:
+        name += "no_stemming"
+    else:
+        name += "w_stemming"
+        
+    test_index_element = load_from_disk(name)
     if test_index_element is None:
-        test_index_element = index_setup(args[0], stemming_flag=args[4], stop_words_flag=args[5],
+        test_index_element = index_setup(name, stemming_flag=args[4], stop_words_flag=args[5],
                                          compression_flag=args[6],
                                          k=args[3], join_algorithm=args[1], scoring_f=args[2])
     if test_index_element.is_ready():
@@ -174,11 +187,10 @@ def relevance_score(relevance_table_df, query_id, k_result_list):
     return 0
 
 
-size_limit = 150
+size_limit = -1
 
 print("Prepare indexes")
 query_handlers_catalogue = []
-index_num = 1
 name_template = "eval_index_" + str(size_limit) + "_"
 
 # config : name, query_alg, scoring_f, k, stem_skip, allow_stopword, compression
@@ -188,28 +200,27 @@ for query_algorithm in query_processing_algorithm_config:
         for topk in k_returned_results_config:
             for compression in compression_choices_config:
                 config_set.append(
-                    [name_template + str(index_num), query_algorithm, scoring_function, topk, True, True, compression])
+                    [name_template, query_algorithm, scoring_function, topk, True, True, compression])
                 config_set.append(
-                    [name_template + str(index_num + 1), query_algorithm, scoring_function, topk, False, True,
+                    [name_template, query_algorithm, scoring_function, topk, False, True,
                      compression])
                 config_set.append(
-                    [name_template + str(index_num + 2), query_algorithm, scoring_function, topk, True, False,
+                    [name_template, query_algorithm, scoring_function, topk, True, False,
                      compression])
                 config_set.append(
-                    [name_template + str(index_num + 3), query_algorithm, scoring_function, topk, False, False,
+                    [name_template, query_algorithm, scoring_function, topk, False, False,
                      compression])
-                index_num += 4
 
-# VERY DANGEROUS EXECUTION:
+            # VERY DANGEROUS EXECUTION:
 # for cfg in config_set:
 #    query_handlers_catalogue.append(prepare_index(cfg))
-for config in config_set[-2:-1]:
+for config in config_set[0:2]:
     query_handlers_catalogue.append(prepare_index(config))
 
 print("TREC 2019 EVALUATION")
 query_file = open(evaluation_trec_queries_2019_path, "r")
 
-trec_score_dicts_list=[]
+trec_score_dicts_list = []
 query_count = 0
 next_qid, next_query = read_query_file(query_file)
 while True:
@@ -220,8 +231,8 @@ while True:
             # result have this structure [(docid, score),....(docid, score)]
             # example: [('116', 5.891602731662223), ('38', 0), ('221', 0), ('297', 0)]
             run_dict = create_run_dict(next_qid, handler.index.name, result)
-            trec_score_dict ={}
-            #if "paul" in next_query:
+            trec_score_dict = {}
+            # if "paul" in next_query:
             #    print("ciao")
             if len(run_dict['query']) > 0:
                 trec_score_dict = evaluate_on_trec(run_dict)
@@ -267,6 +278,5 @@ def test_search(words_list, file_search_algorithm):
     print(" -- Query completed in " + str(toc - tic) + "ms-- ")
     print(res)
 
-
-#config = [300, query_processing_algorithm_config[0], scoring_function_config[0], 4, False, True]
-#query_handler = test_init_index("t_eval", config)
+# config = [300, query_processing_algorithm_config[0], scoring_function_config[0], 4, False, True]
+# query_handler = test_init_index("t_eval", config)
