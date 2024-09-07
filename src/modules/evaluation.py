@@ -16,9 +16,8 @@ EVALUATION PHASE
 
 import pandas as pd
 from evaluate import load
-
+import matplotlib.pyplot as plt
 import time
-
 from src.config import *
 
 from src.modules.InvertedIndex import load_from_disk, index_setup
@@ -125,6 +124,46 @@ def create_run_dict(qid, name, docID_score):
     return run_dict
 
 
+def plot_metrics_line_charts(data_list):
+    metrics = ['metrica1', 'metrica2', 'metrica3']
+
+    for metric in metrics:
+        # Create a figure for each metric
+        plt.figure(figsize=(10, 6))
+
+        # Group data by 'name' and plot each group's data
+        grouped_data = {}
+        for item in data_list:
+            name = item['name']
+            if name not in grouped_data:
+                grouped_data[name] = {'qid': [], 'values': []}
+            grouped_data[name]['qid'].append(item['qid'])
+            grouped_data[name]['values'].append(item[metric])
+
+        # Plotting the lines for each name
+        for name, values in grouped_data.items():
+            plt.plot(values['qid'], values['values'], marker='o', label=name)
+
+        # Add titles and labels
+        plt.title(f'{metric} Line Chart')
+        plt.xlabel('QID')
+        plt.ylabel(f'{metric} Value')
+
+        # Rotate x-axis labels for better readability
+        plt.xticks(rotation=45, ha='right')
+
+        # Show the legend
+        plt.legend(title='Name')
+
+        # Adjust layout to prevent overlap
+        plt.tight_layout()
+
+        # Display the chart
+        plt.show()
+
+
+
+
 def read_query_file(file_pointer):
     line = file_pointer.readline()
     if line == "":
@@ -170,10 +209,18 @@ def prepare_index(args):
         name += "w_stemming"
         
     test_index_element = load_from_disk(name)
+
+    #query_algorithm, scoring_function, topk
+
+
     if test_index_element is None:
         test_index_element = index_setup(name, stemming_flag=args[4], stop_words_flag=args[5],
                                          compression_flag=args[6],
                                          k=args[3], join_algorithm=args[1], scoring_f=args[2])
+    else:
+        test_index_element.algorithm= args[1]
+        test_index_element.scoring= args[2]
+        test_index_element.topk=args[3]
     if test_index_element.is_ready():
         if not test_index_element.content_check(int(size_limit / 2)):
             test_index_element.scan_dataset(size_limit, delete_after_compression=True)
@@ -187,7 +234,8 @@ def relevance_score(relevance_table_df, query_id, k_result_list):
     return 0
 
 
-size_limit = -1
+#size_limit = -1
+size_limit = 150
 
 print("Prepare indexes")
 query_handlers_catalogue = []
@@ -214,7 +262,8 @@ for query_algorithm in query_processing_algorithm_config:
             # VERY DANGEROUS EXECUTION:
 # for cfg in config_set:
 #    query_handlers_catalogue.append(prepare_index(cfg))
-for config in config_set[0:2]:
+#for config in config_set[0:2]:
+for config in config_set[-2:-1]:
     query_handlers_catalogue.append(prepare_index(config))
 
 print("TREC 2019 EVALUATION")
@@ -240,14 +289,12 @@ while True:
             trec_score_dict["qid"] = next_qid
             trec_score_dicts_list.append(trec_score_dict)
             # trec_score = relevance_score(relevance_dataframe, next_qid, result)
-
-    # TODO : vedere il confronto tra tutti
-
     query_count += 1
     next_qid, next_query = read_query_file(query_file)
     if next_qid == -1:
         break
 
+plot_metrics_line_charts(trec_score_dicts_list)
 
 def test_init_index(name, flags):
     test_index_element = load_from_disk(name)
