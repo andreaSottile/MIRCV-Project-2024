@@ -199,7 +199,7 @@ class InvertedIndex:
         pairs = content_string.split(element_separator)
         for pair in pairs:
             delimiters = pair.split(collection_separator)
-            self.content.append([delimiters[0], delimiters[1]])
+            self.content.append([int(delimiters[0]), int(delimiters[1])])
 
     def content_flush(self):
         # remove all docids marked as read
@@ -317,6 +317,7 @@ class InvertedIndex:
         open_dataset(limit_row_size, self, add_document_to_index)
         print_log("dataset scan completed", priority=3)
 
+        close_chunk(self)  # the last chunk is not full, but it's still important to write a file
         lines = merge_chunks(posting_file_list, self.index_file_path, self.lexicon_path, compression=self.compression,
                              delete_after_merge=delete_chunks)
         self.index_len += lines
@@ -449,11 +450,11 @@ def load_from_disk(name):
 
 
 def index_setup(name, stemming_flag, stop_words_flag, compression_flag, k, join_algorithm, scoring_f):
-    print_log("setup for new index", 4)
+    print_log("setup for new index", 1)
     ind = InvertedIndex()
-    print_log("created index", 4)
+    print_log("created index", 1)
     ind.rename(name)  # string
-    print_log("setting flags", 4)
+    print_log("setting flags", 1)
     ind.skip_stemming = stemming_flag  # boolean
     ind.allow_stop_words = stop_words_flag  # boolean
     ind.compression = compression_flag  # string, see config
@@ -462,7 +463,7 @@ def index_setup(name, stemming_flag, stop_words_flag, compression_flag, k, join_
     ind.scoring = scoring_f  # string, see config
     print_log("setup completed, saving to disk", 3)
     ind.save_on_disk()
-    print_log("saved complete", 4)
+    print_log("saved complete", 1)
     print_log(ind.config_path, 4)
     print_log(ind.index_file_path, 4)
     print_log(ind.collection_statistics_path, 4)
@@ -704,6 +705,14 @@ def merge_chunks(file_list, index_file_path, lexicon_file_path, compression="no"
     return written_lines
 
 
+def close_chunk(index):
+    global posting_file_list
+    new_chunk_post = index.update_posting_list("chunk_posting_" + str(len(posting_file_list)) + file_format)
+    posting_file_list.append(new_chunk_post)
+    print_log("chunks created: ", 5)
+    print_log(posting_file_list, 5)
+
+
 def add_document_to_index(index, args):
     # this function is called for each document (row) in the collection
     global posting_file_list  # list of file names
@@ -735,18 +744,8 @@ def add_document_to_index(index, args):
         # inverted index is based on posting lists
         full = add_posting_list(token_id, token_count, docid)
         if full:
-            new_chunk_post = index.update_posting_list("chunk_posting_" + str(len(posting_file_list)) + file_format)
-            posting_file_list.append(new_chunk_post)
-            print_log("chunks created: ", 5)
-            print_log(posting_file_list, 5)
-            # update lexicon at each new word
-        # full = add_to_lexicon(token_id, token_count)
-        # if full:
-        #    new_chunk_lex = index.update_to_lexicon("chunk_lexicon_" + str(len(lexicon_file_list)) + file_format)
-        #    lexicon_file_list.append(new_chunk_lex)
-        #    print_log("chunks created: ", 5)
-        #    print_log(lexicon_file_list, 5)
-        # delete_after_merge=False per verificare struttura dei file di chunk
+            # write chunk in a file, and clean the memory buffer to move on
+            close_chunk(index)
 
     '''
      Possible improvement: disaster recovery

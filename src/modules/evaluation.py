@@ -1,6 +1,3 @@
-# TODO : leggersi pytrec e vedere come funziona
-
-# TODO: FUNZIONAMENTO:
 '''
 EVALUATION PHASE
 0 - we have different indexes, each one having a different set of parameters
@@ -22,8 +19,10 @@ from src.config import *
 
 from src.modules.InvertedIndex import load_from_disk, index_setup
 from src.modules.queryHandler import QueryHandler
+from src.modules.utils import print_log
 
 '''
+example usage of qrel
 qrel_test = {
     "query": [0],
     "q0": ["q0"],
@@ -68,7 +67,7 @@ def evaluate_on_trec(run_dict):
     :return:
     '''
     # Structure of QREL txt file qid, “Q0”, docid, rating
-    qrel = pd.read_csv(r"C:\Users\andre\Desktop\AIDE\mircv\2020qrels-pass.txt", sep=' ',
+    qrel = pd.read_csv(evaluation_trec_qrel_2020_path, sep=' ',
                        names=["query", "q0", "docid", "rel"])
     qrel["q0"] = "q0"
     qrel["docid"] = qrel["docid"].astype(str)
@@ -125,7 +124,22 @@ def create_run_dict(qid, name, docID_score):
 
 
 def plot_metrics_line_charts(data_list):
-    metrics = ['metrica1', 'metrica2', 'metrica3']
+    '''
+    METRICS offered by huggingfaces
+    runid (str): Run name.
+    num_ret (int): Number of retrieved documents.
+    num_rel (int): Number of relevant documents.
+    num_rel_ret (int): Number of retrieved relevant documents.
+    num_q (int): Number of queries.
+    map (float): Mean average precision.
+    gm_map (float): geometric mean average precision.
+    bpref (float): binary preference score.
+    Rprec (float): precision@R, where R is number of relevant documents.
+    recip_rank (float): reciprocal rank
+    P@k (float): precision@k (k in [5, 10, 15, 20, 30, 100, 200, 500, 1000]).
+    NDCG@k (float): nDCG@k (k in [5, 10, 15, 20, 30, 100, 200, 500, 1000]).
+    '''
+    metrics = ['map', 'P@30', 'Rprec', 'NDCG@5']
 
     for metric in metrics:
         # Create a figure for each metric
@@ -140,6 +154,7 @@ def plot_metrics_line_charts(data_list):
             grouped_data[name]['qid'].append(item['qid'])
             grouped_data[name]['values'].append(item[metric])
 
+        # TODO: mettere subplot
         # Plotting the lines for each name
         for name, values in grouped_data.items():
             plt.plot(values['qid'], values['values'], marker='o', label=name)
@@ -162,8 +177,6 @@ def plot_metrics_line_charts(data_list):
         plt.show()
 
 
-
-
 def read_query_file(file_pointer):
     line = file_pointer.readline()
     if line == "":
@@ -174,29 +187,17 @@ def read_query_file(file_pointer):
     return query_id, query_string
 
 
-def load_data(file_path):
+def load_data(file_path):  # TODO: NON USATA
     # Load the text file into a DataFrame with whitespace as delimiter
     df = pd.read_csv(file_path, delim_whitespace=True, header=None, names=['qid', 'q0', 'docid', 'relevance'])
     return df
-
-
-def search_relevance(df, qid, docid):
-    # Use .loc to filter rows that match the given qid and docid
-    res = df.loc[(df['qid'] == qid) & (df['docid'] == docid), 'relevance']
-
-    # If a match is found, return the points as an integer
-    if not res.empty:
-        return int(res.values[0])
-
-    # If no match is found, return None
-    return 0
 
 
 def prepare_index(args):
     global size_limit
 
     # name building: makes clear which indexing flag is used, to avoid repeating indexing with the same flags
-    name = args[0] + "_" + str(size_limit) + "_"
+    name = "_" + str(args[0]) + "_"
     if args[6] == "no":
         name += "uncompressed_"
     else:
@@ -207,35 +208,32 @@ def prepare_index(args):
         name += "no_stemming"
     else:
         name += "w_stemming"
-        
+
+    tic = time.perf_counter()
     test_index_element = load_from_disk(name)
-
-    #query_algorithm, scoring_function, topk
-
 
     if test_index_element is None:
         test_index_element = index_setup(name, stemming_flag=args[4], stop_words_flag=args[5],
                                          compression_flag=args[6],
                                          k=args[3], join_algorithm=args[1], scoring_f=args[2])
     else:
-        test_index_element.algorithm= args[1]
-        test_index_element.scoring= args[2]
-        test_index_element.topk=args[3]
+        test_index_element.algorithm = args[1]
+        test_index_element.scoring = args[2]
+        test_index_element.topk = args[3]
     if test_index_element.is_ready():
         if not test_index_element.content_check(int(size_limit / 2)):
             test_index_element.scan_dataset(size_limit, delete_after_compression=True)
+
+    toc = time.perf_counter()
+    print_log("===========================================================", 0)
+    print_log("Time for preparing the index: ", 0)
+    print_log(str(toc - tic), 0)
+    print_log("===========================================================", 0)
     return QueryHandler(test_index_element)
 
 
-def relevance_score(relevance_table_df, query_id, k_result_list):
-    for docid, _ in k_result_list:
-        rel_score = search_relevance(relevance_table_df, query_id, docid)
-        # TODO : calcolo del TREC score
-    return 0
-
-
-#size_limit = -1
-size_limit = 150
+# size_limit = -1
+size_limit = 350
 
 print("Prepare indexes")
 query_handlers_catalogue = []
@@ -259,15 +257,11 @@ for query_algorithm in query_processing_algorithm_config:
                     [name_template, query_algorithm, scoring_function, topk, False, False,
                      compression])
 
-            # VERY DANGEROUS EXECUTION:
-# for cfg in config_set:
-#    query_handlers_catalogue.append(prepare_index(cfg))
-#for config in config_set[0:2]:
-for config in config_set[-2:-1]:
+for config in config_set[:2]:
     query_handlers_catalogue.append(prepare_index(config))
 
 print("TREC 2019 EVALUATION")
-query_file = open(evaluation_trec_queries_2019_path, "r")
+query_file = open(evaluation_trec_queries_2020_path, "r")
 
 trec_score_dicts_list = []
 query_count = 0
@@ -281,49 +275,15 @@ while True:
             # example: [('116', 5.891602731662223), ('38', 0), ('221', 0), ('297', 0)]
             run_dict = create_run_dict(next_qid, handler.index.name, result)
             trec_score_dict = {}
-            # if "paul" in next_query:
-            #    print("ciao")
             if len(run_dict['query']) > 0:
                 trec_score_dict = evaluate_on_trec(run_dict)
             trec_score_dict["name"] = handler.index.name
             trec_score_dict["qid"] = next_qid
             trec_score_dicts_list.append(trec_score_dict)
-            # trec_score = relevance_score(relevance_dataframe, next_qid, result)
     query_count += 1
     next_qid, next_query = read_query_file(query_file)
     if next_qid == -1:
         break
 
-plot_metrics_line_charts(trec_score_dicts_list)
-
-def test_init_index(name, flags):
-    test_index_element = load_from_disk(name)
-    if test_index_element is None:
-        test_index_element = index_setup(name, stemming_flag=flags[4], stop_words_flag=flags[5],
-                                         compression_flag="no",
-                                         k=flags[3], join_algorithm=flags[1], scoring_f=flags[2])
-    if test_index_element.is_ready():
-        if not test_index_element.content_check(int(flags[0] / 2)):
-            test_index_element.scan_dataset(flags[0], delete_after_compression=False)
-    else:
-        print("index not ready")
-    return QueryHandler(test_index_element)
-
-
-def test_search(words_list, file_search_algorithm):
-    global query_handler
-    print(" --  Searching with " + file_search_algorithm + "  -- ")
-
-    print(words_list)
-    tic = time.perf_counter()
-
-    # TEST QUERY
-
-    res = query_handler.query(words_list, search_file_algorithms=file_search_algorithm)
-
-    toc = time.perf_counter()
-    print(" -- Query completed in " + str(toc - tic) + "ms-- ")
-    print(res)
-
-# config = [300, query_processing_algorithm_config[0], scoring_function_config[0], 4, False, True]
-# query_handler = test_init_index("t_eval", config)
+if size_limit > -1:
+    plot_metrics_line_charts(trec_score_dicts_list)
