@@ -3,21 +3,19 @@ IMPORTANT: THIS FILE IS NOT UPDATED BY GIT
 VARIABLES TAGGED WITH "EDIT HERE" REQUIRE MANUAL CONFIGURATION ON EACH MACHINE
 """
 ''' LOCAL PATHS '''
-# path lorenzo
 # EDIT HERE
-#full_collection_compressed = "D:/Repositories/mircv/dataset/collection.tar.gz"
+full_collection_compressed = "D:/Repositories/mircv/dataset/collection.tar.gz"
 # full_collection_compressed = "/Users/gianluca.cometa/Documents/mircv_dataset/collection.tar.gz"
-# EDIT HERE
-#test_collection_uncompressed = "D:/Repositories/mircv/dataset/test.tsv"
-# EDIT HERE
-#full_collection_uncompressed = "D:/Repositories/mircv/dataset/collection.tsv"
-# full_collection_uncompressed = "/Users/gianluca.cometa/Documents/mircv_dataset/collection.tsv"
-# EDIT HERE
-full_collection_compressed = "C:/Users/andre/Downloads/collection.tar.gz"
+# full_collection_compressed = "C:/Users/andre/Downloads/collection.tar.gz"
+
 # EDIT HERE
 test_collection_uncompressed = "D:/Repositories/mircv/dataset/test.tsv"
+# test_collection_uncompressed = "D:/Repositories/mircv/dataset/test.tsv"
+
 # EDIT HERE
-full_collection_uncompressed = "C:/Users/andre/Downloads/collection.tsv"
+full_collection_uncompressed = "D:/Repositories/mircv/dataset/collection.tsv"
+# full_collection_uncompressed = "/Users/gianluca.cometa/Documents/mircv_dataset/collection.tsv"
+# full_collection_uncompressed = "C:/Users/andre/Downloads/collection.tsv"
 
 '''collection_path : this is the LOCAL path to the dataset.'''
 # EDIT HERE
@@ -25,14 +23,13 @@ collection_path_config = full_collection_compressed
 
 '''index folder: this folder is going to contain all the files to work with inverted indexes'''
 # EDIT HERE
-#index_config_path = "D:/Repositories/mircv/dataset/index_info_"  # file name is going to be added at the end
-index_config_path = r"C:\Users\andre\Desktop\AIDE\mircv\index_info_"  # file name is going to be added at the end
+index_config_path = "D:/Repositories/mircv/dataset/index_info_"  # file name is going to be added at the end
+# index_config_path = r"C:\Users\andre\Desktop\AIDE\mircv\index_info_"  # file name is going to be added at the end
 # index_config_path = "/Users/gianluca.cometa/Documents/mircv_dataset/index_info_"  # file name is going to be added at the end
 # EDIT HERE
-#index_folder_path = "D:/Repositories/mircv/dataset/index"  # folder is going to contain several files for each index
+index_folder_path = "D:/Repositories/mircv/dataset/index"  # folder is going to contain several files for each index
 # index_folder_path = "/Users/gianluca.cometa/Documents/mircv_dataset/index"  # folder is going to contain several files for each index
-index_folder_path = r"C:\Users\andre\Desktop\AIDE\mircv\index"  # folder is going to contain several files for each index
-
+# index_folder_path = r"C:\Users\andre\Desktop\AIDE\mircv\index"  # folder is going to contain several files for each index
 
 '''
 Dataset Specification. You must use the MSMARCO Passages collection1 available on
@@ -67,24 +64,23 @@ TREC DL 2020 queries and TREC DL 2020 qrels.
 '''
 # EDIT HERE
 # qrel 2019
-#evaluation_trec_qrel_2019_path = "D:/Repositories/mircv/dataset/trec/2019qrels-pass.txt"
-evaluation_trec_qrel_2019_path = r"C:\Users\andre\Desktop\AIDE\mircv\2019qrels-pass.txt"
+evaluation_trec_qrel_2019_path = "D:/Repositories/mircv/dataset/trec/2019qrels-pass.txt"
+# evaluation_trec_qrel_2019_path = r"C:\Users\andre\Desktop\AIDE\mircv\2019qrels-pass.txt"
 
 # EDIT HERE
 # qrel 2020
-#evaluation_trec_qrel_2020_path = "D:/Repositories/mircv/dataset/trec/2020qrels-pass.txt"
-evaluation_trec_qrel_2020_path = r"C:\Users\andre\Desktop\AIDE\mircv\2020qrels-pass.txt"
+evaluation_trec_qrel_2020_path = "D:/Repositories/mircv/dataset/trec/2020qrels-pass.txt"
+# evaluation_trec_qrel_2020_path = r"C:\Users\andre\Desktop\AIDE\mircv\2020qrels-pass.txt"
 
 # EDIT HERE
 # queries 2019
-#evaluation_trec_queries_2019_path = "D:/Repositories/mircv/dataset/trec/msmarco-test2019-queries.tsv"
-evaluation_trec_queries_2019_path = r"C:\Users\andre\Desktop\AIDE\mircv\msmarco-test2019-queries.tsv"
+evaluation_trec_queries_2019_path = "D:/Repositories/mircv/dataset/trec/msmarco-test2019-queries.tsv"
+# evaluation_trec_queries_2019_path = r"C:\Users\andre\Desktop\AIDE\mircv\msmarco-test2019-queries.tsv"
 
 # EDIT HERE
 # queries 2020
-#evaluation_trec_queries_2020_path = "D:/Repositories/mircv/dataset/trec/msmarco-test2020-queries.tsv"
-evaluation_trec_queries_2020_path = r"C:\Users\andre\Desktop\AIDE\mircv\msmarco-test2020-queries.tsv"
-
+evaluation_trec_queries_2020_path = "D:/Repositories/mircv/dataset/trec/msmarco-test2020-queries.tsv"
+# evaluation_trec_queries_2020_path = r"C:\Users\andre\Desktop\AIDE\mircv\msmarco-test2020-queries.tsv"
 
 """
 STRING FORMAT CONFIG: list of useful variables to easily remember string separators
@@ -104,7 +100,7 @@ Raising the verbosity level modify the verbosity of the python console during th
 This function is used to properly document and debug the whole project.
 '''
 # EDIT HERE
-verbosity_config = 5
+verbosity_config = 2
 
 '''
 TEST MODE WITH LIMITED ROWS
@@ -123,9 +119,10 @@ limit_input_rows_config = 0
 CHUNK SIZE FOR INDEXING
 instead of writing index files frequently, add them in memory and write only when the buffer is full
 size is counted in number of read documents
+DISABLE CHUNK SPLIT: if this variable is -1, there is no splitting in chunks and all the data is loaded into memory 
 '''
 # EDIT HERE
-index_chunk_size = 250
+index_chunk_size = -1
 
 '''
 BM 25 PARAMETERS

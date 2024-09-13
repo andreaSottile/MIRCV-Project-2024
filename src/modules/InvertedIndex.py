@@ -249,7 +249,7 @@ class InvertedIndex:
                 stats) + chunk_line_separator)
             self.num_doc += 1
 
-    def update_posting_list(self, filename):
+    def create_posting_chunk(self, filename):
         # write a chunk of posting lists to disk
         # @ param filename: output file path (complete with file format)
         global posting_buffer
@@ -317,11 +317,19 @@ class InvertedIndex:
         open_dataset(limit_row_size, self, add_document_to_index)
         print_log("dataset scan completed", priority=3)
 
-        close_chunk(self)  # the last chunk is not full, but it's still important to write a file
-        lines = merge_chunks(posting_file_list, self.index_file_path, self.lexicon_path, compression=self.compression,
-                             delete_after_merge=delete_chunks)
+        if len(posting_file_list) > 0:
+            # the last chunk is not full, but it's still important to write a file
+            close_chunk(self)
+
+            lines = merge_chunks(posting_file_list, self.index_file_path, self.lexicon_path,
+                                 compression=self.compression,
+                                 delete_after_merge=delete_chunks)
+        else:
+            # there is only one chunk, either for the size too big, the file count too small, or chunk splitting is disabled
+            lines = write_output_files(self.index_file_path, self.lexicon_path,
+                                       compression=self.compression)
         self.index_len += lines
-        #        lines = merge_chunks(lexicon_file_list, self.lexicon_path, self.lexicon_path, mode="lexicon", delete_after_merge=delete_chunks)
+
         self.lexicon_len += lines
         print_log("merged all chunks", priority=1)
         if self.compression:
@@ -341,53 +349,6 @@ class InvertedIndex:
                         except Exception as e:
                             print(f"Errore nel cancellare {file_path}: {e}")
         self.save_on_disk()
-
-
-def make_posting_list_old(list_doc_id, list_freq, compression="no"):
-    # Step 1: Encode the number of doc IDs
-    num_docs = len(list_doc_id)
-    combined = list(zip(list_doc_id, list_freq))
-    combined.sort(key=lambda x: int(x[0]))
-
-    # Scomponi le liste ordinate
-    list_doc_id_sorted, list_freq_sorted = zip(*combined)
-
-    # Converti le tuple risultanti in liste
-    list_doc_id_sorted = list(list_doc_id_sorted)
-    list_freq_sorted = list(list_freq_sorted)
-    gap_list = []
-    previous_doc_id = 0
-    for doc_id in list_doc_id_sorted:
-        gap_list.append(int(doc_id) - previous_doc_id)
-        previous_doc_id = int(doc_id)
-    if compression != "no":
-        if compression == "unary":
-            encoded_num_docs = to_unary(num_docs)
-            # print(encoded_num_docs)
-        elif compression == "gamma":
-            encoded_num_docs = to_gamma(num_docs)
-        else:
-            raise ValueError(f"Unsupported encoding type: {compression}")
-        # Step 2: Encode the doc IDs using gap encoding
-
-        if compression == "unary":
-            encoded_gap_list = [to_unary(gap) for gap in gap_list]
-            encoded_freq_list = [to_unary(int(freq)) for freq in list_freq_sorted]
-        elif compression == "gamma":
-            encoded_gap_list = [to_gamma(gap) for gap in gap_list]
-            encoded_freq_list = [to_gamma(int(freq)) for freq in list_freq_sorted]
-
-        # Combine the bit streams: number of doc IDs, doc IDs, and frequencies
-        bit_stream = encoded_num_docs + ''.join(encoded_gap_list) + ''.join(encoded_freq_list)
-
-        # return bit_stream
-
-        # Convert the bit stream into bytes
-        compressed_bytes = bit_stream_to_bytes(bit_stream)
-        return compressed_bytes
-    else:
-        posting_string = ",".join(list(map(str, gap_list))) + " " + ",".join(list_freq_sorted) + chunk_line_separator
-        return posting_string
 
 
 def make_posting_list(list_doc_id, list_freq, compression="no"):
@@ -473,7 +434,7 @@ def index_setup(name, stemming_flag, stop_words_flag, compression_flag, k, join_
 
 
 def add_posting_list(token_id, token_count, docid):
-    # add new entries in posting list
+    # add new entries in posting list.
     global posting_buffer
     # print_log("adding new posting list: " + str(token_id), priority=5)
     stats = [docid, token_count]
@@ -492,6 +453,8 @@ def add_posting_list(token_id, token_count, docid):
             break
     if not found_token:
         posting_buffer.append([token_id, stats])
+    if index_chunk_size < 1:  # no limit on the chunk size
+        return False
     if len(posting_buffer) > index_chunk_size:
         print_log("posting memory buffer is full", priority=4)
         return True  # chunk is big, time to write it on disk
@@ -499,118 +462,29 @@ def add_posting_list(token_id, token_count, docid):
         return False  # no need to write it on disk yet
 
 
-'''
-def add_to_lexicon(token_id, token_count):
-    # add new word into lexicon
-    # @ param token_id : token(string)
-    # @ param token_count : frequency of the token
-    global lexicon_buffer
-    #  print_log("adding word to lexicon: " + str(token_id), priority=5)
-    found = False
-    for token in lexicon_buffer:
-        if token[0] == token_id:
-            found = True
-            token[1] += token_count
-            break
-    if not found:
-        lexicon_buffer.append([token_id, token_count])
-    if len(lexicon_buffer) > index_chunk_size:
-        print_log("lexicon memory buffer is full", priority=4)
-        return True  # chunk is big, time to write it on disk
-    else:
-        return False  # no need to write it on disk yet
-
-
-def merge_chunks(file_list, output_file_path, mode="", delete_after_merge=True):
+def write_output_files(index_file_path, lexicon_path, compression="no"):
+    global posting_buffer
     written_lines = 0
-    reader_list = []  # list of pointers to files
-    doc_list=[]
-    occurrence_list=[]
-    first_element_list = []  # list of the next (lowest) element taken from each file
-    for file in file_list:
-        reader = open(file, "r+")
-        reader_list.append(reader)
-        first_element_list.append(reader.readline())
 
-    if os.path.exists(output_file_path):
-        # delete the file if any previous duplicate was present
-        os.remove(output_file_path)
+    # MANDATORY: every chunk must be ordinated
+    posting_buffer_sorted = sorted(posting_buffer, key=lambda x: x[0])
 
-    output_file = open(output_file_path, "w+")
-    while True:
-        next_chunk_index = []
-        # cerco in ogni elemento di firstelemlist
-        i = 0
-        output_row = ""  # list of elements for the posting list
-        # example of output row :: ["0|1" , "1|2"]
-        output_key = ""  # token as string
-        # esamino il primo elemento di ogni file, cerco il minore e scrivo la sua posizione in next_index
-        for element in first_element_list:
-            # controllo che quella lista abbia ancora elementi
-            if element != "empty":
-                element = element.replace("\n", "")
-                if mode == "posting":
-                    element_splitted = element.split(sep=posting_separator)
-                    # estraggo l'elemento alfabeticamente minore
-                    if output_key == "" or element_splitted[0] < output_key:
-                        output_key, output_row = element_splitted[0], element_splitted[1].split(element_separator)
-                        next_chunk_index = [i]
-                    elif element_splitted[0] == output_key:
-                        # token1:docid1|count;docid2|count;................docidN|count
-                        for ep in element_splitted[1].split(element_separator):
-                            output_row.append(ep)
-                        output_row = sorted(output_row,
-                                            key=lambda x: x.split(docid_separator)[0])
-                        next_chunk_index.append(i)
-                elif mode == "lexicon":
-                    element_splitted = element.split(sep=element_separator)
-                    # estraggo l'elemento alfabeticamente minore
-                    if output_key == "" or element_splitted[0] < output_key:
-                        output_key, output_row = element_splitted[0], int(element_splitted[1])
-                        next_chunk_index = [i]
-                    elif element_splitted[0] == output_key:
-                        # token ; count
-                        output_row += int(element_splitted[1])
-                        next_chunk_index.append(i)
-                else:
-                    print_log("CRITICAL ERROR: Unknown merge mode")
-            i += 1
-        if len(next_chunk_index) > 0:
-            # rimpiazzo l'elemento estratto leggendo il successivo
-            for index in next_chunk_index:
-                first_element_list[index] = reader_list[index].readline()
-                if len(first_element_list[index]) == 0:
-                    first_element_list[index] = "empty"
-            # lo scrivo nel file output
-            if mode == "posting":
-                line = ""
-                for e in output_row:
-                    e.split("|")
-                    line += e
-                    doc_list.append(e[0])
-                    occurrence_list.append(e[1])
-                    if e != output_row[-1]:
-                        line += element_separator
-                #output_file.write(str(output_key) + posting_separator + line.replace("\n", "") + chunk_line_separator)
-                output_file.write(make_posting_list(output_key,doc_list, occurrence_list) + chunk_line_separator)
+    with open(index_file_path, "w") as index_file:
+        with open(lexicon_path, "w") as lexicon_file:
+            for element in posting_buffer_sorted:
+                token = str(element[0])
+                occurrence_list = []
+                doc_list = []
+                for doc, f in element[1:]:
+                    doc_list.append(str(doc))
+                    occurrence_list.append(str(f))
+                posting_offset = index_file.tell()
+                index_file.write(make_posting_list(doc_list, occurrence_list, compression))
                 written_lines += 1
-            elif mode == "lexicon":
-                output_file.write(output_key + element_separator + str(output_row) + chunk_line_separator)
-                written_lines += 1
-        else:
-            # se tutte le liste sono vuote, ho finito
-            break
+                lexicon_file.write(token + element_separator + str(len(doc_list)) + element_separator + str(
+                    posting_offset) + chunk_line_separator)
 
-    print_log("Chunks merge finished for "+str(mode), 1)
-    for file in reader_list:
-        file.close()
-    if delete_after_merge:
-        print_log("Deleting chunks after merge", 2)
-        for file_name in file_list:
-            os.remove(file_name)
-    output_file.close()
     return written_lines
-'''
 
 
 def merge_chunks(file_list, index_file_path, lexicon_file_path, compression="no", delete_after_merge=True):
@@ -670,25 +544,20 @@ def merge_chunks(file_list, index_file_path, lexicon_file_path, compression="no"
                 first_element_list[index] = reader_list[index].readline()
                 if len(first_element_list[index]) == 0:
                     first_element_list[index] = "empty"
+
             # lo scrivo nel file output
             line = ""
             doc_list = []
             occurrence_list = []
             for e in output_row:
                 elem = e.split("|")
-                # line += e
                 doc_list.append(elem[0])
                 occurrence_list.append(elem[1])
-                # if e != output_row[-1]:
-                #    line += element_separator
-            # output_file.write(str(output_key) + posting_separator + line.replace("\n", "") + chunk_line_separator)
             posting_offset = index_file.tell()
-            # index_file.write(make_posting_list_old(doc_list, occurrence_list, compression))
             index_file.write(make_posting_list(doc_list, occurrence_list, compression))
             written_lines += 1
             lexicon_file.write(output_key + element_separator + str(len(doc_list)) + element_separator + str(
                 posting_offset) + chunk_line_separator)
-            written_lines += 1
         else:
             # se tutte le liste sono vuote, ho finito
             break
@@ -707,7 +576,7 @@ def merge_chunks(file_list, index_file_path, lexicon_file_path, compression="no"
 
 def close_chunk(index):
     global posting_file_list
-    new_chunk_post = index.update_posting_list("chunk_posting_" + str(len(posting_file_list)) + file_format)
+    new_chunk_post = index.create_posting_chunk("chunk_posting_" + str(len(posting_file_list)) + file_format)
     posting_file_list.append(new_chunk_post)
     print_log("chunks created: ", 5)
     print_log(posting_file_list, 5)
@@ -743,7 +612,7 @@ def add_document_to_index(index, args):
     for token_id, token_count in token_counts:
         # inverted index is based on posting lists
         full = add_posting_list(token_id, token_count, docid)
-        if full:
+        if full:  # this check is always false without using the chunk splitting
             # write chunk in a file, and clean the memory buffer to move on
             close_chunk(index)
 

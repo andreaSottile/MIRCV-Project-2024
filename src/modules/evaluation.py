@@ -233,7 +233,7 @@ def prepare_index(args):
 
 
 # size_limit = -1
-size_limit = 350
+size_limit = 318
 
 print("Prepare indexes")
 query_handlers_catalogue = []
@@ -257,7 +257,7 @@ for query_algorithm in query_processing_algorithm_config:
                     [name_template, query_algorithm, scoring_function, topk, False, False,
                      compression])
 
-for config in config_set[:2]:
+for config in config_set[:1]:
     query_handlers_catalogue.append(prepare_index(config))
 
 print("TREC 2019 EVALUATION")
