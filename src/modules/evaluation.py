@@ -187,12 +187,6 @@ def read_query_file(file_pointer):
     return query_id, query_string
 
 
-def load_data(file_path):  # TODO: NON USATA
-    # Load the text file into a DataFrame with whitespace as delimiter
-    df = pd.read_csv(file_path, delim_whitespace=True, header=None, names=['qid', 'q0', 'docid', 'relevance'])
-    return df
-
-
 def prepare_index(args):
     global size_limit
 
@@ -260,14 +254,14 @@ for query_algorithm in query_processing_algorithm_config:
 for config in config_set[:1]:
     query_handlers_catalogue.append(prepare_index(config))
 
-print("TREC 2019 EVALUATION")
+print("TREC EVALUATION")
 query_file = open(evaluation_trec_queries_2020_path, "r")
 
 trec_score_dicts_list = []
 query_count = 0
 next_qid, next_query = read_query_file(query_file)
 while True:
-    print("next query: " + next_query)
+    print_log("next query: " + next_query, 4)
     for handler in query_handlers_catalogue:
         for algorithm in search_into_file_algorithms:
             result = handler.query(next_query, algorithm)
@@ -285,5 +279,5 @@ while True:
     if next_qid == -1:
         break
 
-if size_limit > -1:
+if size_limit == -1:
     plot_metrics_line_charts(trec_score_dicts_list)

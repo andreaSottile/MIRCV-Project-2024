@@ -68,17 +68,17 @@ class QueryHandler:
         return avg_length
 
     def query(self, query_string, search_file_algorithms):
-        print_log("received query", 2)
+        print_log("received query", 3)
         query_terms = self.prepare_query(query_string)
-        print_log("reading each posting lists for: ", 2)
-        print_log(query_terms, 2)
+        print_log("reading each posting lists for: ", 3)
+        print_log(query_terms, 4)
         raw_posting_lists, doc_freq_list = self.fetch_posting_lists(query_terms, search_file_algorithms)
         # raw_posting_lists is a list of strings, where each string is a
-        print_log("converting post list to dictionaries", 2)
+        print_log("converting post list to dictionaries", 3)
         posting_lists = make_posting_candidates(query_terms, raw_posting_lists)
-        print_log("calculating relevance with algorithm: " + self.index.algorithm, 2)
+        print_log("calculating relevance with algorithm: " + self.index.algorithm, 4)
         related_documents = self.detect_related_documents(posting_lists)
-        print_log("calculating scores for related documents", 2)
+        print_log("calculating scores for related documents", 3)
         scores = self.compute_scoring_function(posting_lists, related_documents, search_file_algorithms)
         return get_top_k(self.index.topk, scores)
 
@@ -161,8 +161,8 @@ class QueryHandler:
                 print_log("CRITICAL ERROR: query algorithm not set", 0)
                 return []
         # returns a list of related docids
-        print_log("related documents ID list", 2)
-        print_log(candidates, 2)
+        print_log("related documents ID list", 4)
+        print_log(candidates, 4)
         return sorted(list(candidates), key=lambda x: int(x))
 
     def compute_scoring_function(self, posting_lists, related_documents, search_file_algorithms):
@@ -180,7 +180,7 @@ class QueryHandler:
             # log ( N of docs in the collection / N of relevant docs )
             if postingListObj.size > 0:
                 idf = math.log(self.num_docs / len(postingListObj.docids))
-                print_log("calculated IDF : " + str(idf), 3)
+                print_log("calculated IDF : " + str(idf), 4)
 
                 # read posting list, extract doc_ids from posting list
                 for i in range(len(postingListObj.docids)):
