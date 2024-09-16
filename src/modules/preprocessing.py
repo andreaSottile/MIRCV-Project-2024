@@ -10,6 +10,7 @@ stemmer = None
 
 
 def tokenizer(text):
+    # transform a text into a list of tokens (words)
     tokens = []
     for word in text.split(" "):
         tokens.append(word)
@@ -17,6 +18,7 @@ def tokenizer(text):
 
 
 def remove_stopwords(tokens):
+    # clean a list of tokens using an external list of stop words (language dependant)
     global stop_words
     if stop_words is None:
         stop_words = set(stopwords.words('english'))
@@ -31,6 +33,7 @@ def remove_stopwords(tokens):
 
 
 def stemming(tokens):
+    # perform stemming on a list of tokens
     global stemmer
     if stemmer is None:
         stemmer = PorterStemmer()
@@ -53,6 +56,7 @@ def clean_text(text):
 
 
 def preprocess_text(text, skip_stemming=True, allow_stop_words=True):
+    # execute all preprocessing steps, as required by flags
     clean = clean_text(text)
     tokens = tokenizer(clean)
     if not allow_stop_words:

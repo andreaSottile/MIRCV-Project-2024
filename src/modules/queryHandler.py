@@ -52,10 +52,12 @@ class QueryHandler:
         self.doc_len_average = self.compute_docs_average(index_file.num_doc)  # len (stats.txt)
 
     def prepare_query(self, query_raw):
+        # takes a query (string, in natural language) and apply the same preprocessing steps applied to the dataset
         return preprocess_query_string(query_raw, stem_flag=self.index.skip_stemming,
                                        stop_flag=self.index.allow_stop_words)
 
-    def compute_docs_average(self, docs_count):  # len (stats.txt)
+    def compute_docs_average(self, docs_count):
+        # required for some scoring functions
         total_length_doc = 0
         with open(self.index.collection_statistics_path, 'rb') as f:
             while True:
@@ -68,6 +70,7 @@ class QueryHandler:
         return avg_length
 
     def query(self, query_string, search_file_algorithms):
+        # executes a whole query, starting from natural language and outputting the top k results
         print_log("received query", 3)
         query_terms = self.prepare_query(query_string)
         print_log("reading each posting lists for: ", 3)
@@ -81,11 +84,6 @@ class QueryHandler:
         print_log("calculating scores for related documents", 3)
         scores = self.compute_scoring_function(posting_lists, related_documents, search_file_algorithms)
         return get_top_k(self.index.topk, scores)
-
-    def extract_top_k(self, results):
-        # @param results: a dictionary of {doc_id,score}
-        ranked_list = {k: v for k, v in sorted(results.items(), key=lambda x: x[1])}
-        return ranked_list[0:self.index.topk]
 
     def fetch_posting_lists(self, query_terms, search_algorithm):
         '''
@@ -145,7 +143,7 @@ class QueryHandler:
         candidates = set(posting_lists[next(iter(posting_lists))].docids)
         print_log("first set of candidates", 3)
         print_log(candidates, 3)
-        for term in posting_lists:  # TODO: skip the first
+        for term in posting_lists:  # the first one could be skipped, since it's a copy
             if self.index.algorithm == "conjunctive":
                 # intersection
                 candidates &= set(posting_lists[term].docids)
@@ -166,11 +164,7 @@ class QueryHandler:
         return sorted(list(candidates), key=lambda x: int(x))
 
     def compute_scoring_function(self, posting_lists, related_documents, search_file_algorithms):
-        # @ param query_terms : list of words in the query string
-        # @ param doc_count : number of documents in the index
-        # @ param doclen_avg : average of len of all the docs in the collection
-        # @ param scoring_f : string for scoring function (see configs for options)
-        # return the scored list of the relevant documents {docid,score}
+        # return the scored list of the relevant documents {docid,score} as a dictionary
         scores = {}
         if not related_documents:
             print_log("Cannot compute scores, no relevant document detected", 1)
@@ -226,10 +220,7 @@ def make_posting_candidates(tokens, raw_posting_lists):
 
 
 def search_in_index(index_file, res_offset, compression):
-    # index_file.seek(7802)
-    # compressed_bytes = index_file.read()
-    # decoded_doc_ids, decoded_freq = decode_posting_list(compressed_bytes, config[6], encoding_type="unary")
-    # print(decoded_doc_ids)
+    # extract one posting list from the index file, given the position (offset = [start,stop])
     offset_start = int(res_offset[0])
     offset_stop = int(res_offset[1])
     nbytes = offset_stop - offset_start
@@ -285,7 +276,7 @@ def search_in_lexicon(lexicon, token, search_algorithm):
             last_read_position = line_pos
     else:
         print_log("Critical error: cannot search without a search algorithm", 0)
-        return []
+        return [], -1
 
     # search failed: return a blank
     if line_pos == -1:
@@ -303,12 +294,11 @@ def search_in_lexicon(lexicon, token, search_algorithm):
 
 def search_in_doc_stats_file(doc_stats_file, docid, search_algorithm):
     '''
-    open the lexicon file given one query word, and return its entry
+    open the doc stats file given one query word, and return its entry
     :param doc_stats_file: pointer to the doc stats file
     :param docid: docid to look for
     :param search_algorithm: user can choose any one search algorithm implemented
-    :return 1: offset interval <start,stop> relative to "token" for the lexicon file
-    :return 2: doc frequency: number of documents that contain the token at least once
+    :return: size of the document
     '''
 
     results = []
@@ -347,12 +337,12 @@ def search_in_doc_stats_file(doc_stats_file, docid, search_algorithm):
             last_read_position = line_pos
     else:
         print_log("Critical error: cannot search without a search algorithm", 0)
-        return []
+        return 0
 
     # search failed: return a blank
     if line_pos == -1:
-        print_log("Cannot find token " + str(docid) + " in doc stats file", 2)
-        return [], -1
+        print_log("Cannot find " + str(docid) + " in doc stats file", 2)
+        return 0
 
     # search success: return offset and docfreq
 
@@ -425,16 +415,3 @@ def weight_bm11(idf, term_freq, avg, doc_len):
     if term_freq == 0:
         return 0
     return idf * term_freq / (term_freq + BM_k_one * (doc_len / avg))
-
-
-'''
-def query(self, query_str, top_k=10):
-    query_terms = query_str.lower().split()
-    scores = defaultdict(float)
-    for term in query_terms:
-        if term in self.index:
-            for doc_id, _ in self.index[term]:
-                scores[doc_id] += self.compute_tfidf(term, doc_id)
-    ranked_docs = heapq.nlargest(top_k, scores.items(), key=lambda item: item[1])
-    return [(self.doc_ids[doc_id], score) for doc_id, score in ranked_docs]
-'''

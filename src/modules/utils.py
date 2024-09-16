@@ -1,13 +1,13 @@
-# 0 : only errors
-# 1 : processes and modules
-# 2 : critical blocks
-# 3 : function calls
-# 4 : row by row (debug)
-# 5 : loop iterations
 from src.config import verbosity_config
 
 
 def print_log(msg, priority=0):
+    # 0 : only errors
+    # 1 : processes and modules
+    # 2 : critical blocks
+    # 3 : function calls
+    # 4 : row by row (debug)
+    # 5 : loop iterations
     if priority <= verbosity_config:
         print(msg)
 
@@ -127,13 +127,17 @@ def next_GEQ_line(file_pointer, position):
 
 
 def ternary_search(file_pointer, start_position, target_key, delimiter, end_position, last_key, last_row):
-    # search the key-word in a file, using a 3-nary search
-    # @ param file_pointer : file where to look for the word
-    # @ param low : start of the search interval at iteration 0
-    # @ param high : end of the search interval at iteration 0
-    # @ param key_delimiter : char separating the key-word from the rest of the line
-    # @ returns : pair position_in_file,line if success. -1,"" if failure
-
+    '''
+      search the key-word in a file, using a 3-nary search
+     @ param file_pointer : file where to look for the word
+     @ param start_position : start of the search interval at iteration 0
+     @ param target_key : token/string to look for
+     @ param delimiter : char separating the key-word from the rest of the line
+     @ end_position : last character of the file
+     @ last_Key : key of the last line of the file
+     @ last_row : last row of the file
+     @ returns : pair position_in_file,line if success. -1,"" if failure
+    '''
     # ternary search: split the interval into 3, and keep reducing the 3 segments in size until finding the element
     #  low   <  checkpoint_1  <  checkpoint_2 < high
     low_pos, low_row = next_GEQ_line(file_pointer, start_position)

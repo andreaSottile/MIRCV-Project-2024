@@ -1,11 +1,6 @@
 from src.modules.utils import print_log
 
 
-def compress_index(index_name, index_file_path, index_lexicon_path):
-    # compression of index file
-    print_log("compressing index file", priority=1)
-
-
 def to_unary(n):
     # Unary encoding: n-1 ones followed by a final zero
     return '1' * (n - 1) + '0'

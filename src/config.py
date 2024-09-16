@@ -117,8 +117,8 @@ limit_input_rows_config = 0
 
 '''
 CHUNK SIZE FOR INDEXING
-instead of writing index files frequently, add them in memory and write only when the buffer is full
-size is counted in number of read documents
+instead of writing index files frequently, add them in memory and write only when the buffer is full.
+size is counted in number of lines (one line is one posting list).
 DISABLE CHUNK SPLIT: if this variable is -1, there is no splitting in chunks and all the data is loaded into memory 
 '''
 # EDIT HERE

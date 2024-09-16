@@ -325,29 +325,27 @@ class InvertedIndex:
                                  compression=self.compression,
                                  delete_after_merge=delete_chunks)
         else:
-            # there is only one chunk, either for the size too big, the file count too small, or chunk splitting is disabled
+            # there is only one chunk, either for the size too big, the file count too small, or chunk splitting is
+            # disabled
             lines = write_output_files(self.index_file_path, self.lexicon_path,
                                        compression=self.compression)
         self.index_len += lines
 
         self.lexicon_len += lines
         print_log("merged all chunks", priority=1)
-        if self.compression:
-            print_log("compressing index file", priority=1)
-            compress_index(self.name, self.index_file_path, self.lexicon_path)
-            print_log("compression finished", priority=3)
-            if delete_after_compression:
-                print_log("deleted uncompressed index file", priority=1)
-                for filename in os.listdir(index_folder_path + self.name):
-                    # Verifica se il nome del file inizia con "chunk"
-                    if filename.startswith("chunk"):
-                        file_path = os.path.join(index_folder_path + self.name, filename)
-                        try:
-                            # Cancella il file
-                            os.remove(file_path)
-                            print(f"File cancellato: {file_path}")
-                        except Exception as e:
-                            print(f"Errore nel cancellare {file_path}: {e}")
+
+        if delete_after_compression:
+            print_log("deleted uncompressed index file", priority=1)
+            for filename in os.listdir(index_folder_path + self.name):
+                # look for files with name starting with "chunk"
+                if filename.startswith("chunk"):
+                    file_path = os.path.join(index_folder_path + self.name, filename)
+                    try:
+                        # delete file
+                        os.remove(file_path)
+                        print(f"File deleted: {file_path}")
+                    except Exception as e:
+                        print(f"Error deleting {file_path}: {e}")
         self.save_on_disk()
 
 
@@ -356,10 +354,10 @@ def make_posting_list(list_doc_id, list_freq, compression="no"):
     combined = list(zip(list_doc_id, list_freq))
     combined.sort(key=lambda x: int(x[0]))
 
-    # Scomponi le liste ordinate
+    # split combined list
     list_doc_id_sorted, list_freq_sorted = zip(*combined)
 
-    # Converti le tuple risultanti in liste
+    # convert them into lists
     list_doc_id_sorted = list(list_doc_id_sorted)
     list_freq_sorted = list(list_freq_sorted)
     gap_list = []
@@ -513,39 +511,38 @@ def merge_chunks(file_list, index_file_path, lexicon_file_path, compression="no"
 
     while True:
         next_chunk_index = []
-        # cerco in ogni elemento di firstelemlist
+        # i have to compare every element of firstelemlist
         i = 0
         output_row = ""  # list of elements for the posting list
         # example of output row :: ["0|1" , "1|2"]
         output_key = ""  # token as string
-        # esamino il primo elemento di ogni file, cerco il minore e scrivo la sua posizione in next_index
+        # look at each first element, search the lowest, write its index in next_index
         for element in first_element_list:
-            # controllo che quella lista abbia ancora elementi
+            # make sure the list is not empty
             if element != "empty":
                 element = element.replace(" \n", "")
                 element_splitted = element.split(sep=posting_separator)
-                # estraggo l'elemento alfabeticamente minore
+                # "lowest" is in alphabetical order
                 if output_key == "" or element_splitted[0] < output_key:
                     output_key, output_row = element_splitted[0], element_splitted[1].split(element_separator)
                     next_chunk_index = [i]
                 elif element_splitted[0] == output_key:
-                    # token1:docid1|count;docid2|count;................docidN|count
+                    # example of "element_splitted[i]: token1:docid1|count;docid2|count;................docidN|count
                     for ep in element_splitted[1].split(element_separator):
                         output_row.append(ep)
                     output_row = sorted(output_row,
                                         key=lambda x: x.split(docid_separator)[0])
                     next_chunk_index.append(i)
-                # else:
-                #    print_log("CRITICAL ERROR: Unknown merge mode")
+
             i += 1
         if len(next_chunk_index) > 0:
-            # rimpiazzo l'elemento estratto leggendo il successivo
+            # move the list pointer to the next element
             for index in next_chunk_index:
                 first_element_list[index] = reader_list[index].readline()
                 if len(first_element_list[index]) == 0:
                     first_element_list[index] = "empty"
 
-            # lo scrivo nel file output
+            # OUTPUT: writing the index file
             line = ""
             doc_list = []
             occurrence_list = []
@@ -559,7 +556,7 @@ def merge_chunks(file_list, index_file_path, lexicon_file_path, compression="no"
             lexicon_file.write(output_key + element_separator + str(len(doc_list)) + element_separator + str(
                 posting_offset) + chunk_line_separator)
         else:
-            # se tutte le liste sono vuote, ho finito
+            # all lists are empty
             break
 
     print_log("Chunks merge finished for ", 1)

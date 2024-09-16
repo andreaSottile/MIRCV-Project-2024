@@ -1,16 +1,3 @@
-'''
-EVALUATION PHASE
-0 - we have different indexes, each one having a different set of parameters
-1 - take a query from the trec-queries.tsv
-2 - execute the query (on each index we have)
-3 - for each document retrieved, search the relevance in the trec-qrel.txt
-                    (there is a relevance for each query_id-doc_id pair)
-4 - take the list of relevances and calculate the measure score
-5 - compare (graphically?) the scores between different indexes
-6 - repeat for each query at step 1
-
-'''
-
 import pandas as pd
 from evaluate import load
 import matplotlib.pyplot as plt
@@ -20,28 +7,6 @@ from src.config import *
 from src.modules.InvertedIndex import load_from_disk, index_setup
 from src.modules.queryHandler import QueryHandler
 from src.modules.utils import print_log
-
-'''
-example usage of qrel
-qrel_test = {
-    "query": [0],
-    "q0": ["q0"],
-    "docid": ["doc_1"],
-    "rel": [2]
-}
-run_test = {
-    "query": [0, 0],
-    "q0": ["q0", "q0"],
-    "docid": ["doc_2", "doc_1"],
-    "rank": [0, 1],
-    "score": [1.5, 1.2],
-    "system": ["test", "test"]
-}
-
-trec_eval = load("trec_eval")
-results_test = trec_eval.compute(references=[qrel_test], predictions=[run_test])
-print("ciao")
-'''
 
 
 def evaluate_on_trec(run_dict):
@@ -54,15 +19,6 @@ def evaluate_on_trec(run_dict):
         score (float): Score of document.
         system (str): Tag for current run.
 
-        Example:
-            run = {
-                    "query": [0, 0],
-                    "q0": ["q0", "q0"],
-                    "docid": ["doc_2", "doc_1"],
-                    "rank": [0, 1],
-                    "score": [1.5, 1.2],
-                    "system": ["test", "test"]
-                 }
     :param run_dict: dict on a single retrieval run.
     :return:
     '''
@@ -81,15 +37,6 @@ def evaluate_on_trec(run_dict):
 
 def create_run_dict(qid, name, docID_score):
     """
-    This function creates the run_dict with this structure:
-        predictions (dict): a single retrieval run.
-        query (int): Query ID.
-        q0 (str): Literal "q0".
-        docid (str): Document ID.
-        rank (int): Rank of document.
-        score (float): Score of document.
-        system (str): Tag for current run.
-
     Example of a simple dict:
         run = {
         "query": [0, 0],
@@ -226,8 +173,8 @@ def prepare_index(args):
     return QueryHandler(test_index_element)
 
 
-# size_limit = -1
-size_limit = 318
+size_limit = -1
+# size_limit = 318
 
 print("Prepare indexes")
 query_handlers_catalogue = []
@@ -251,7 +198,7 @@ for query_algorithm in query_processing_algorithm_config:
                     [name_template, query_algorithm, scoring_function, topk, False, False,
                      compression])
 
-for config in config_set[:1]:
+for config in config_set[0:1]:
     query_handlers_catalogue.append(prepare_index(config))
 
 print("TREC EVALUATION")
