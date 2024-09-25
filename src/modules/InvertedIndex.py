@@ -16,7 +16,7 @@ performance.
 from src.config import *
 import os
 
-from src.modules.compression import compress_index, to_unary, to_gamma, bit_stream_to_bytes
+from src.modules.compression import to_unary, to_gamma, bit_stream_to_bytes
 from src.modules.documentProcessing import open_dataset
 from src.modules.preprocessing import preprocess_text, count_token_occurrences
 from src.modules.utils import readline_with_strip, print_log
@@ -67,10 +67,12 @@ class InvertedIndex:
         print_log("index \'" + str(old) + "\' renamed as \'" + str(self.name) + "\'", priority=3)
 
     def is_ready(self):
-        if self.name != member_blank_tag and self.collection_statistics_path != file_blank_tag and \
-                self.index_file_path != file_blank_tag and self.lexicon_path != file_blank_tag and \
-                self.config_path != file_blank_tag:
-            return True
+        if self.name != member_blank_tag:
+            if self.collection_statistics_path != file_blank_tag:
+                if self.index_file_path != file_blank_tag:
+                    if self.lexicon_path != file_blank_tag:
+                        if self.config_path != file_blank_tag:
+                            return True
         return False
 
     def delete_from_disk(self):
@@ -197,19 +199,25 @@ class InvertedIndex:
         # the index. this function takes a string (read from disk) and decode it
         self.content = []
         pairs = content_string.split(element_separator)
-        for pair in pairs:
-            delimiters = pair.split(collection_separator)
-            self.content.append([int(delimiters[0]), int(delimiters[1])])
+        if content_string == "empty":
+            self.content = []
+        else:
+            for pair in pairs:
+                delimiters = pair.split(collection_separator)
+                self.content.append([int(delimiters[0]), int(delimiters[1])])
 
     def content_flush(self):
         # remove all docids marked as read
         self.content = []
 
     def content_check(self, docid):
-        # check if docid is contained in the index
+        # check if the index contains the specified docid
         # @ param docid : id (row number of the original dataset)
+        # @ return : True if the index contains docid, False if the docid is not in the content range
+        if docid < 0:
+            docid = 123  # a random number, we are just checking if there is at least one line
         for interval in self.content:
-            if int(interval[0]) < docid < int(interval[1]):
+            if int(interval[0]) <= docid <= int(interval[1]):
                 return True
         else:
             return False
@@ -594,9 +602,9 @@ def add_document_to_index(index, args):
     if not index.is_ready():
         print_log("cannot add document with uninitialized index", priority=0)
 
-    is_duplicate = index.add_content_id(docid)
+    is_duplicate = index.add_content_id(docno)
     if is_duplicate:
-        print_log("duplicate document " + str(docid), priority=4)
+        print_log("duplicate document " + str(docno), priority=4)
         return
     print_log("adding row " + str(docid) + " as document " + str(docno) + " to index " + str(index.name), priority=5)
 

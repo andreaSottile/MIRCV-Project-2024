@@ -27,6 +27,16 @@ from src.config import collection_path_config, limit_input_rows_config
 from src.modules.utils import print_log
 
 
+def extract_dataset_from_tar(path):
+    print_log("Opening tar.gz file", priority=2)
+    tar = tarfile.open(path, "r:gz")
+    dataset_compressed = tar.getmember("collection.tsv")
+    print_log("tar.gz uncompression: starting", priority=4)
+    dataset_raw = tar.extractfile(dataset_compressed)
+    print_log("tar.gz uncompression: finished", priority=4)
+    return io.TextIOWrapper(dataset_raw, encoding='utf-8')
+
+
 def open_dataset(count_limit=-1, index=None, process_function=None):
     if count_limit > 0 and 0 < limit_input_rows_config < count_limit:
         count_limit = limit_input_rows_config
@@ -35,31 +45,24 @@ def open_dataset(count_limit=-1, index=None, process_function=None):
     print_log("opening dataset file", priority=3)
     if collection_path_config.endswith(".gz"):
         # working with compressed file, required uncompression
-        print_log("Opening tar.gz file", priority=2)
+        dataset = extract_dataset_from_tar(collection_path_config)
 
-        tar = tarfile.open(collection_path_config, "r:gz")
-        for member in tar.getmembers():
-            print_log("tar.gz uncompression: starting", priority=4)
-            dataset_raw = tar.extractfile(member)
-            print_log("tar.gz uncompression: finished", priority=4)
-            dataset_wrapped = io.TextIOWrapper(dataset_raw, encoding='utf-8')
-
-            while True:
-                line = dataset_wrapped.readline()
-                if line:
-                    print_log("read progress: " + str(read_rows), priority=5)
-                    if 0 < count_limit <= read_rows:
-                        break
-                    content = line.strip().split("\t")
-                    if len(content) == 2:
-                        process_dataset_row(read_rows, content[0], content[1], process_function, index)
-                    else:
-                        print_log("invalid line len at row " + str(read_rows), priority=4)
-
-                    read_rows += 1
-                else:
+        while True:
+            line = dataset.readline()
+            if line:
+                print_log("read progress: " + str(read_rows), priority=5)
+                if 0 < count_limit <= read_rows:
                     break
-            print_log("read finished", priority=4)
+                content = line.strip().split("\t")
+                if len(content) == 2:
+                    process_dataset_row(read_rows, content[0], content[1], process_function, index)
+                else:
+                    print_log("invalid line len at row " + str(read_rows), priority=4)
+
+                read_rows += 1
+            else:
+                break
+        print_log("read finished", priority=4)
 
     elif collection_path_config.endswith(".tsv"):
         # working with .tsv file

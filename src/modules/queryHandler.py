@@ -75,7 +75,7 @@ class QueryHandler:
         query_terms = self.prepare_query(query_string)
         print_log("reading each posting lists for: ", 3)
         print_log(query_terms, 4)
-        raw_posting_lists, doc_freq_list = self.fetch_posting_lists(query_terms, search_file_algorithms)
+        raw_posting_lists = self.fetch_posting_lists(query_terms, search_file_algorithms)
         # raw_posting_lists is a list of strings, where each string is a
         print_log("converting post list to dictionaries", 3)
         posting_lists = make_posting_candidates(query_terms, raw_posting_lists)
@@ -96,9 +96,10 @@ class QueryHandler:
         :param search_algorithm: pick an algorithm from the ones available (see config file)
         :param query_terms: list of words (strings) to search for
         :return:
+        @ res : offset (as number of chars) in the index file to find the posting list
+        @ doc_freq_array : number of documents that contains the token at least once
         '''
         res = []
-        doc_freq_array = []
         if not self.index.is_ready():
             print_log("Calling Search on unknown index", 0)
             print_log(self.index.index_file_path, 0)
@@ -114,7 +115,6 @@ class QueryHandler:
             for token in query_terms:  # for each token...
                 # search in lexicon for the offsets (start and finish in the inv.index file)
                 res_offset_interval, doc_freq = search_in_lexicon(f, token, search_algorithm)
-                doc_freq_array.append(doc_freq)
                 if doc_freq == -1:
                     # token not found in lexicon
                     res.append("")
@@ -123,7 +123,7 @@ class QueryHandler:
                     res_posting_string = search_in_index(index_file, res_offset_interval, self.index.compression)
                     # store the posting list for each word
                     res.append(res_posting_string)
-        return res, doc_freq_array
+        return res
 
     def fetch_doc_size(self, key, search_file_algorithms):
         #    expected row from the collection statistics file:
@@ -136,13 +136,13 @@ class QueryHandler:
     def detect_related_documents(self, posting_lists):
         # take all the token_keys from the first element
         if len(posting_lists) < 1:
-            print_log("no posting list found: ", 2)
-            print_log(posting_lists, 2)
+            print_log("no posting list found: ", 3)
+            print_log(posting_lists, 3)
             return []
         # initialize the candidates with the keys of the first posting list
         candidates = set(posting_lists[next(iter(posting_lists))].docids)
-        print_log("first set of candidates", 3)
-        print_log(candidates, 3)
+        print_log("first set of candidates", 4)
+        print_log(candidates, 4)
         for term in posting_lists:  # the first one could be skipped, since it's a copy
             if self.index.algorithm == "conjunctive":
                 # intersection
@@ -189,6 +189,14 @@ class QueryHandler:
                     if self.index.scoring == "TFIDF":
                         w_t_d = weight_tfidf(idf, term_freq=postingListObj.freqs[i])
                     elif self.index.scoring == "BM11":
+                        # TODO :
+                        # il fetch doc size ci mette troppo. serve accorciare la ricerca.
+                        # facciamo che i docid da circare devono essere accorpati in liste di intervalli
+                        # da [1,2,4,7,8,11] a [[1,2],[4],[7,8],[11]
+                        # poi, siccome la fetch_doc_size la usiamo solo qui, modificare le search in modo che accetti gli intervalli
+                        # ricordare: fatta la search, mi ritorna il punto del file dove ho letto
+                        # quindi è facile leggere la riga immediatamente dopo
+                        # seconda cosa: ridurre l'intervallo di ricerca per le search successive visto che i docid sono ordinati
                         doc_len = self.fetch_doc_size(postingListObj.docids[i], search_file_algorithms)
                         w_t_d = weight_bm11(idf, term_freq=postingListObj.freqs[i], avg=self.doc_len_average,
                                             doc_len=doc_len)

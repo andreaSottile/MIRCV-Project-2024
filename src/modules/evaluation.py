@@ -9,7 +9,7 @@ from src.modules.queryHandler import QueryHandler
 from src.modules.utils import print_log
 
 
-def evaluate_on_trec(run_dict):
+def evaluate_on_trec(run_dict, trec_eval):
     '''
     This function take as an argument a dict related to a query with this structure:
         query (int): Query ID.
@@ -30,7 +30,6 @@ def evaluate_on_trec(run_dict):
     qrel = qrel.to_dict(orient="list")
     results = {}
     if run_dict['query'][0] in qrel['query']:
-        trec_eval = load("trec_eval")
         results = trec_eval.compute(references=[qrel], predictions=[run_dict])
     return results
 
@@ -162,8 +161,14 @@ def prepare_index(args):
         test_index_element.scoring = args[2]
         test_index_element.topk = args[3]
     if test_index_element.is_ready():
+        # check a random line (size_limit/2 is a line in the middle of the index)
         if not test_index_element.content_check(int(size_limit / 2)):
+            # if there is no content, start the dataset scan
             test_index_element.scan_dataset(size_limit, delete_after_compression=True)
+    else:
+        # if not ready, it's not been initialized correctly
+        print_log("CRITICAL Error during index setup", 0)
+        return None
 
     toc = time.perf_counter()
     print_log("===========================================================", 0)
@@ -174,11 +179,12 @@ def prepare_index(args):
 
 
 size_limit = -1
-# size_limit = 318
+#size_limit = 1318
 
 print("Prepare indexes")
 query_handlers_catalogue = []
 name_template = "eval_index_" + str(size_limit) + "_"
+trec_eval = load("trec_eval")
 
 # config : name, query_alg, scoring_f, k, stem_skip, allow_stopword, compression
 config_set = []
@@ -208,19 +214,23 @@ trec_score_dicts_list = []
 query_count = 0
 next_qid, next_query = read_query_file(query_file)
 while True:
-    print_log("next query: " + next_query, 4)
+    print_log("next query: " + next_query, 3)
     for handler in query_handlers_catalogue:
         for algorithm in search_into_file_algorithms:
+            tic = time.perf_counter()
             result = handler.query(next_query, algorithm)
             # result have this structure [(docid, score),....(docid, score)]
             # example: [('116', 5.891602731662223), ('38', 0), ('221', 0), ('297', 0)]
             run_dict = create_run_dict(next_qid, handler.index.name, result)
             trec_score_dict = {}
             if len(run_dict['query']) > 0:
-                trec_score_dict = evaluate_on_trec(run_dict)
+                trec_score_dict = evaluate_on_trec(run_dict,trec_eval)
             trec_score_dict["name"] = handler.index.name
             trec_score_dict["qid"] = next_qid
+            toc = time.perf_counter()
+            trec_score_dict["exec_time_s"] = toc-tic
             trec_score_dicts_list.append(trec_score_dict)
+
     query_count += 1
     next_qid, next_query = read_query_file(query_file)
     if next_qid == -1:
