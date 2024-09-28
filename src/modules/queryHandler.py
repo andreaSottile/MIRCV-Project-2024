@@ -13,6 +13,8 @@ you should implement a dynamic pruning algorithm.
 '''
 import math
 
+import numpy as np
+
 from src.config import *
 from src.modules.compression import decode_posting_list
 from src.modules.postingList import postingList
@@ -125,13 +127,31 @@ class QueryHandler:
                     res.append(res_posting_string)
         return res
 
-    def fetch_doc_size(self, key, search_file_algorithms):
+    def fetch_documents_size(self, keys, search_file_algorithms):
+        # get the document size for each docids
+        # @ param keys : list of docids
+        # @ param search_file_algorithms : algorithm to perform search in the documents statistics file
+        # @ return : dictionary of {docids : size}
+
         #    expected row from the collection statistics file:
         #    docid + collection_separator + docno + collection_separator + size + chunk_line_separator
+        checkpoint = 0
+        results = {}
+        last_docid_read = np.nan
         with open(self.index.collection_statistics_path, "r+") as doc_stats_file:
-            size, last_read_position = search_in_doc_stats_file(doc_stats_file, key, search_file_algorithms)
-        # res is a string like "docid,docno,doc_size"
-        return int(size)
+            for docid in keys:
+                if docid == last_docid_read + 1:
+                    # consecutive read: skip the search phase
+                    checkpoint, line = next_GEQ_line(doc_stats_file, checkpoint + 1)
+                    # line is a string like "docid,docno,doc_size"
+                    size = line.split(",")[2].strip()
+                else:
+                    size, checkpoint = search_in_doc_stats_file(doc_stats_file, docid, search_file_algorithms,
+                                                                checkpoint)
+                last_docid_read = docid
+                results[docid] = int(size)
+
+        return results
 
     def detect_related_documents(self, posting_lists):
         # take all the token_keys from the first element
@@ -169,7 +189,12 @@ class QueryHandler:
         if not related_documents:
             print_log("Cannot compute scores, no relevant document detected", 1)
             return {}
-        print(posting_lists)
+
+        # fetch doc size if necessary
+        doc_size = {}
+        if self.index.scoring in ["BM11", "BM25"]:
+            doc_size = self.fetch_documents_size(related_documents, search_file_algorithms)
+
         for token_key, postingListObj in posting_lists.items():
             # log ( N of docs in the collection / N of relevant docs )
             if postingListObj.size > 0:
@@ -189,21 +214,13 @@ class QueryHandler:
                     if self.index.scoring == "TFIDF":
                         w_t_d = weight_tfidf(idf, term_freq=postingListObj.freqs[i])
                     elif self.index.scoring == "BM11":
-                        # TODO :
-                        # il fetch doc size ci mette troppo. serve accorciare la ricerca.
-                        # facciamo che i docid da circare devono essere accorpati in liste di intervalli
-                        # da [1,2,4,7,8,11] a [[1,2],[4],[7,8],[11]
-                        # poi, siccome la fetch_doc_size la usiamo solo qui, modificare le search in modo che accetti gli intervalli
-                        # ricordare: fatta la search, mi ritorna il punto del file dove ho letto
-                        # quindi è facile leggere la riga immediatamente dopo
-                        # seconda cosa: ridurre l'intervallo di ricerca per le search successive visto che i docid sono ordinati
-                        doc_len = self.fetch_doc_size(postingListObj.docids[i], search_file_algorithms)
+                        doc_len = doc_size[postingListObj.docids[i]]
                         w_t_d = weight_bm11(idf, term_freq=postingListObj.freqs[i], avg=self.doc_len_average,
                                             doc_len=doc_len)
                     elif self.index.scoring == "BM15":
                         w_t_d = weight_bm15(idf, term_freq=postingListObj.freqs[i])
                     elif self.index.scoring == "BM25":
-                        doc_len = self.fetch_doc_size(postingListObj.docids[i], search_file_algorithms)
+                        doc_len = doc_size[postingListObj.docids[i]]
                         w_t_d = weight_bm25(idf, term_freq=postingListObj.freqs[i], avg=self.doc_len_average,
                                             doc_len=doc_len)
                     if postingListObj.docids[i] in scores.keys():
@@ -300,17 +317,18 @@ def search_in_lexicon(lexicon, token, search_algorithm):
     return [start_offset, stop_offset], docfreq
 
 
-def search_in_doc_stats_file(doc_stats_file, docid, search_algorithm):
+def search_in_doc_stats_file(doc_stats_file, docid, search_algorithm, last_checkpoint=0):
     '''
     open the doc stats file given one query word, and return its entry
     :param doc_stats_file: pointer to the doc stats file
     :param docid: docid to look for
     :param search_algorithm: user can choose any one search algorithm implemented
+    :param last_checkpoint: skip some content at the beginning of the file if i know it doesnt contain the docid
     :return: size of the document
     '''
 
     results = []
-    last_read_position = 0
+    last_read_position = last_checkpoint
     line_pos = -1
     line = ""
 
