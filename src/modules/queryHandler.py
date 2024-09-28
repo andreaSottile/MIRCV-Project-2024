@@ -128,8 +128,8 @@ class QueryHandler:
     def fetch_doc_size(self, key, search_file_algorithms):
         #    expected row from the collection statistics file:
         #    docid + collection_separator + docno + collection_separator + size + chunk_line_separator
-        doc_stats_file = open(self.index.collection_statistics_path, "r+")
-        size = search_in_doc_stats_file(doc_stats_file, key, search_file_algorithms)
+        with open(self.index.collection_statistics_path, "r+") as doc_stats_file:
+            size, last_read_position = search_in_doc_stats_file(doc_stats_file, key, search_file_algorithms)
         # res is a string like "docid,docno,doc_size"
         return int(size)
 
@@ -313,6 +313,7 @@ def search_in_doc_stats_file(doc_stats_file, docid, search_algorithm):
     last_read_position = 0
     line_pos = -1
     line = ""
+
     if search_algorithm == "ternary":
         last_line_pos, last_line = get_last_line(doc_stats_file)
         line_pos, line = ternary_search(doc_stats_file, start_position=last_read_position, target_key=docid,
@@ -356,7 +357,7 @@ def search_in_doc_stats_file(doc_stats_file, docid, search_algorithm):
 
     doc_len = line.split(",")[2].strip()
 
-    return doc_len
+    return doc_len, line_pos
 
 
 def read_lexicon_line(line):
