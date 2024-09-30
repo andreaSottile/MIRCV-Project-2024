@@ -222,11 +222,12 @@ class InvertedIndex:
         else:
             return False
 
-    def add_content_id(self, docid):
+    def add_content_id(self, docno):
         # content is a list of couples, each couple is a pair <low,high> of docids that have already been processed
         # returns True if @param docid is duplicate
         # return False if new docid has been added
         out_of_interval = True
+        docid = int(docno)
         for interval in self.content:
             if interval[0] <= docid <= interval[1]:
                 return True  # mark as duplicate
@@ -602,7 +603,7 @@ def add_document_to_index(index, args):
     if not index.is_ready():
         print_log("cannot add document with uninitialized index", priority=0)
 
-    is_duplicate = index.add_content_id(docno)
+    is_duplicate = index.add_content_id(int(docno))
     if is_duplicate:
         print_log("duplicate document " + str(docno), priority=4)
         return
