@@ -4,8 +4,8 @@ VARIABLES TAGGED WITH "EDIT HERE" REQUIRE MANUAL CONFIGURATION ON EACH MACHINE
 """
 ''' LOCAL PATHS '''
 # EDIT HERE
-full_collection_compressed = "D:/Repositories/mircv/dataset/collection.tar.gz"
-# full_collection_compressed = "/Users/gianluca.cometa/Documents/mircv_dataset/collection.tar.gz"
+#full_collection_compressed = "D:/Repositories/mircv/dataset/collection.tar.gz"
+full_collection_compressed = "/Users/gianluca.cometa/Documents/mircv_dataset/collection.tar.gz"
 # full_collection_compressed = "C:/Users/andre/Downloads/collection.tar.gz"
 
 # EDIT HERE
@@ -13,8 +13,8 @@ test_collection_uncompressed = "D:/Repositories/mircv/dataset/test.tsv"
 # test_collection_uncompressed = "D:/Repositories/mircv/dataset/test.tsv"
 
 # EDIT HERE
-full_collection_uncompressed = "D:/Repositories/mircv/dataset/collection.tsv"
-# full_collection_uncompressed = "/Users/gianluca.cometa/Documents/mircv_dataset/collection.tsv"
+#full_collection_uncompressed = "D:/Repositories/mircv/dataset/collection.tsv"
+full_collection_uncompressed = "/Users/gianluca.cometa/Documents/mircv_dataset/collection.tsv"
 # full_collection_uncompressed = "C:/Users/andre/Downloads/collection.tsv"
 
 '''collection_path : this is the LOCAL path to the dataset.'''
@@ -23,12 +23,12 @@ collection_path_config = full_collection_compressed
 
 '''index folder: this folder is going to contain all the files to work with inverted indexes'''
 # EDIT HERE
-index_config_path = "D:/Repositories/mircv/dataset/index_info_"  # file name is going to be added at the end
+#index_config_path = "D:/Repositories/mircv/dataset/index_info_"  # file name is going to be added at the end
 # index_config_path = r"C:\Users\andre\Desktop\AIDE\mircv\index_info_"  # file name is going to be added at the end
-# index_config_path = "/Users/gianluca.cometa/Documents/mircv_dataset/index_info_"  # file name is going to be added at the end
+index_config_path = "/Users/gianluca.cometa/Documents/mircv_dataset/index_info_"  # file name is going to be added at the end
 # EDIT HERE
-index_folder_path = "D:/Repositories/mircv/dataset/index"  # folder is going to contain several files for each index
-# index_folder_path = "/Users/gianluca.cometa/Documents/mircv_dataset/index"  # folder is going to contain several files for each index
+#index_folder_path = "D:/Repositories/mircv/dataset/index"  # folder is going to contain several files for each index
+index_folder_path = "/Users/gianluca.cometa/Documents/mircv_dataset/index"  # folder is going to contain several files for each index
 # index_folder_path = r"C:\Users\andre\Desktop\AIDE\mircv\index"  # folder is going to contain several files for each index
 
 '''
@@ -64,22 +64,26 @@ TREC DL 2020 queries and TREC DL 2020 qrels.
 '''
 # EDIT HERE
 # qrel 2019
-evaluation_trec_qrel_2019_path = "D:/Repositories/mircv/dataset/trec/2019qrels-pass.txt"
+#evaluation_trec_qrel_2019_path = "D:/Repositories/mircv/dataset/trec/2019qrels-pass.txt"
+evaluation_trec_qrel_2019_path = "/Users/gianluca.cometa/Documents/mircv_dataset/2019qrels-pass.txt"
 # evaluation_trec_qrel_2019_path = r"C:\Users\andre\Desktop\AIDE\mircv\2019qrels-pass.txt"
 
 # EDIT HERE
 # qrel 2020
-evaluation_trec_qrel_2020_path = "D:/Repositories/mircv/dataset/trec/2020qrels-pass.txt"
+#evaluation_trec_qrel_2020_path = "D:/Repositories/mircv/dataset/trec/2020qrels-pass.txt"
+evaluation_trec_qrel_2020_path = "/Users/gianluca.cometa/Documents/mircv_dataset/2020qrels-pass.txt"
 # evaluation_trec_qrel_2020_path = r"C:\Users\andre\Desktop\AIDE\mircv\2020qrels-pass.txt"
 
 # EDIT HERE
 # queries 2019
-evaluation_trec_queries_2019_path = "D:/Repositories/mircv/dataset/trec/msmarco-test2019-queries.tsv"
+#evaluation_trec_queries_2019_path = "D:/Repositories/mircv/dataset/trec/msmarco-test2019-queries.tsv"
+evaluation_trec_qrel_2020_path = "/Users/gianluca.cometa/Documents/mircv_dataset/2020qrels-pass.txt"
 # evaluation_trec_queries_2019_path = r"C:\Users\andre\Desktop\AIDE\mircv\msmarco-test2019-queries.tsv"
 
 # EDIT HERE
 # queries 2020
-evaluation_trec_queries_2020_path = "D:/Repositories/mircv/dataset/trec/msmarco-test2020-queries.tsv"
+#evaluation_trec_queries_2020_path = "D:/Repositories/mircv/dataset/trec/msmarco-test2020-queries.tsv"
+evaluation_trec_queries_2020_path = "/Users/gianluca.cometa/Documents/mircv_dataset/msmarco-test2020-queries.tsv"
 # evaluation_trec_queries_2020_path = r"C:\Users\andre\Desktop\AIDE\mircv\msmarco-test2020-queries.tsv"
 
 """
@@ -122,8 +126,8 @@ size is counted in number of lines (one line is one posting list).
 DISABLE CHUNK SPLIT: if this variable is -1, there is no splitting in chunks and all the data is loaded into memory 
 '''
 # EDIT HERE
-index_chunk_size = -1
-
+#index_chunk_size = -1
+index_chunk_size = 1000000
 '''
 BM 25 PARAMETERS
 k_one in [1.2,2]
