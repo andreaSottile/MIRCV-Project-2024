@@ -47,6 +47,7 @@ def get_parameter(parameter_name):
     if parameter_name == "search_algorithm":
         return search_algorithm
 
+
 def get_index_title():
     return str(index_title)
 

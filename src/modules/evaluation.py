@@ -1,50 +1,21 @@
-'''
-EVALUATION PHASE
-0 - we have different indexes, each one having a different set of parameters
-1 - take a query from the trec-queries.tsv
-2 - execute the query (on each index we have)
-3 - for each document retrieved, search the relevance in the trec-qrel.txt
-                    (there is a relevance for each query_id-doc_id pair)
-4 - take the list of relevances and calculate the measure score
-5 - compare (graphically?) the scores between different indexes
-6 - repeat for each query at step 1
-
-'''
-
 import pandas as pd
-from evaluate import load
-import matplotlib.pyplot as plt
 import time
 from src.config import *
-
+import seaborn as sns
 from src.modules.InvertedIndex import load_from_disk, index_setup
 from src.modules.queryHandler import QueryHandler
 from src.modules.utils import print_log
 
-'''
-example usage of qrel
-qrel_test = {
-    "query": [0],
-    "q0": ["q0"],
-    "docid": ["doc_1"],
-    "rel": [2]
-}
-run_test = {
-    "query": [0, 0],
-    "q0": ["q0", "q0"],
-    "docid": ["doc_2", "doc_1"],
-    "rank": [0, 1],
-    "score": [1.5, 1.2],
-    "system": ["test", "test"]
-}
+import matplotlib
 
-trec_eval = load("trec_eval")
-results_test = trec_eval.compute(references=[qrel_test], predictions=[run_test])
-print("ciao")
-'''
+matplotlib.use('TkAgg')  # issue with pycharm? this is a backend configuration
+import matplotlib.pyplot as plt
+
+import numpy as np
+from matplotlib.colors import hsv_to_rgb
 
 
-def evaluate_on_trec(run_dict):
+def evaluate_on_trec(run_dict, trec_eval):
     '''
     This function take as an argument a dict related to a query with this structure:
         query (int): Query ID.
@@ -54,15 +25,6 @@ def evaluate_on_trec(run_dict):
         score (float): Score of document.
         system (str): Tag for current run.
 
-        Example:
-            run = {
-                    "query": [0, 0],
-                    "q0": ["q0", "q0"],
-                    "docid": ["doc_2", "doc_1"],
-                    "rank": [0, 1],
-                    "score": [1.5, 1.2],
-                    "system": ["test", "test"]
-                 }
     :param run_dict: dict on a single retrieval run.
     :return:
     '''
@@ -74,22 +36,12 @@ def evaluate_on_trec(run_dict):
     qrel = qrel.to_dict(orient="list")
     results = {}
     if run_dict['query'][0] in qrel['query']:
-        trec_eval = load("trec_eval")
         results = trec_eval.compute(references=[qrel], predictions=[run_dict])
     return results
 
 
 def create_run_dict(qid, name, docID_score):
     """
-    This function creates the run_dict with this structure:
-        predictions (dict): a single retrieval run.
-        query (int): Query ID.
-        q0 (str): Literal "q0".
-        docid (str): Document ID.
-        rank (int): Rank of document.
-        score (float): Score of document.
-        system (str): Tag for current run.
-
     Example of a simple dict:
         run = {
         "query": [0, 0],
@@ -123,6 +75,37 @@ def create_run_dict(qid, name, docID_score):
     return run_dict
 
 
+def get_distinct_color(index):
+    """
+    Generates a distinct color for the given index.
+
+    Parameters:
+        index (int): The index for which to generate a color.
+
+    Returns:
+        tuple: A (r, g, b) tuple representing the color in RGB format.
+    """
+    # Base number of different hue divisions
+    base_hue_divisions = 12  # Number of unique hues before starting to adjust saturation or value
+
+    # Compute hue by cycling around the HSV color wheel
+    hue = (index % base_hue_divisions) / base_hue_divisions  # evenly spaced hue values
+
+    # Increase saturation and value slightly for each round after base_hue_divisions
+    saturation = 0.9 - 0.05 * (index // base_hue_divisions)  # decrease saturation slightly after each round
+    value = 0.9 - 0.05 * (index // (2 * base_hue_divisions))  # decrease brightness after every two rounds
+
+    # Ensure saturation and value stay within valid [0, 1] range
+    saturation = max(0.5, saturation)
+    value = max(0.5, value)
+
+    # Create the HSV color and convert to RGB
+    hsv_color = np.array([hue, saturation, value])
+    rgb_color = hsv_to_rgb(hsv_color)
+
+    return rgb_color
+
+
 def plot_metrics_line_charts(data_list):
     '''
     METRICS offered by huggingfaces
@@ -141,40 +124,121 @@ def plot_metrics_line_charts(data_list):
     '''
     metrics = ['map', 'P@30', 'Rprec', 'NDCG@5']
 
-    for metric in metrics:
-        # Create a figure for each metric
-        plt.figure(figsize=(10, 6))
+    grouped_data = {}
+    all_qids = []
 
-        # Group data by 'name' and plot each group's data
-        grouped_data = {}
-        for item in data_list:
-            name = item['name']
-            if name not in grouped_data:
-                grouped_data[name] = {'qid': [], 'values': []}
-            grouped_data[name]['qid'].append(item['qid'])
-            grouped_data[name]['values'].append(item[metric])
+    for item in data_list:
+        qid = int(item['qid'])
+        if qid not in all_qids:
+            all_qids.append(qid)
+        name = item['name']
 
-        # TODO: mettere subplot
-        # Plotting the lines for each name
-        for name, values in grouped_data.items():
-            plt.plot(values['qid'], values['values'], marker='o', label=name)
+        # check if examining a new index
+        if name not in grouped_data.keys():
+            # if new, initialize a new set of lists
+            # list of qids (x axis)
+            grouped_data[name] = {'qid': [], 'exec_time_s': []}
+            for metric in metrics:
+                # list of the values for each metric (grouped by index name)
+                grouped_data[name][metric] = []
 
-        # Add titles and labels
-        plt.title(f'{metric} Line Chart')
-        plt.xlabel('QID')
-        plt.ylabel(f'{metric} Value')
+        # query id and execution times
+        grouped_data[name]['qid'].append(qid)
+        grouped_data[name]['exec_time_s'].append(item['exec_time_s'])
 
-        # Rotate x-axis labels for better readability
-        plt.xticks(rotation=45, ha='right')
+        # metric values
+        for metric in metrics:
+            # some values might be missing if the query result is empty
+            if metric in item.keys():
+                # data is present
+                grouped_data[name][metric].append(item[metric])
+            else:
+                # blank
+                grouped_data[name][metric].append(0)
 
-        # Show the legend
-        plt.legend(title='Name')
+    all_qids = sorted(all_qids)
 
-        # Adjust layout to prevent overlap
-        plt.tight_layout()
+    # PLOT ISSUE: if query ids are not ordered, figures are weird shapes. to ensure they're not overlapping lines, enforce query ids to be ordered
+    for name in grouped_data:
+        # Extract the 'qid' list and the other lists corresponding to the metrics
+        qids = grouped_data[name]['qid']
 
-        # Display the chart
-        plt.show()
+        # list of where to move each value
+        sorted_indices = sorted(range(len(qids)), key=lambda i: qids[i])
+
+        # Sort the qid list based on the sorted indices
+        grouped_data[name]['qid'] = [grouped_data[name]['qid'][i] for i in sorted_indices]
+
+        # Sort all other lists (exec_time_s, map, etc.) based on the sorted qid order
+        for key in grouped_data[name]:
+            if key != 'qid':  # Skip 'qid' because it is already sorted
+                grouped_data[name][key] = [grouped_data[name][key][i] for i in sorted_indices]
+
+    print_log("plotting metrics", 3)
+    fig, axs = plt.subplots(2, 5)
+    axs[0, 0].set_title(metrics[0])
+    axs[1, 0].set_title(metrics[0])
+    axs[0, 1].set_title(metrics[1])
+    axs[1, 1].set_title(metrics[1])
+    axs[0, 2].set_title(metrics[2])
+    axs[1, 2].set_title(metrics[2])
+    axs[0, 3].set_title(metrics[3])
+    axs[1, 3].set_title(metrics[3])
+    axs[0, 4].set_title("execution time")
+    axs[1, 4].set_title("execution time")
+
+    group_names = []
+    heatmaps = [np.zeros((len(grouped_data), len(all_qids)))]
+    for _ in range(len(metrics)):
+        heatmaps.append(np.zeros((len(grouped_data), len(all_qids))))
+    for index_num, (index_name, index_graph) in enumerate(grouped_data.items()):
+        color = get_distinct_color(index_num)
+        # qids (x values) are treated like categorical flags, and not integers (there is no correlation between qids)
+        x = []
+        for local_x in index_graph['qid']:
+            x.append(all_qids.index(local_x))
+        name = index_name.replace("_", " ")
+
+        # lines charts
+        axs[0, 0].plot(x, index_graph[metrics[0]], color=color, label=name)
+        axs[0, 1].plot(x, index_graph[metrics[1]], color=color)
+        axs[0, 2].plot(x, index_graph[metrics[2]], color=color)
+        axs[0, 3].plot(x, index_graph[metrics[3]], color=color)
+        axs[0, 4].plot(x, index_graph["exec_time_s"], color=color)
+
+        # heatmaps for metrics
+        group_names.append(name)  # Add group name to the list
+
+        for plot, metric in enumerate(metrics):
+            for qid_idx, qid in enumerate(all_qids):
+                if qid in index_graph['qid']:  # If qid exists in this group's data
+                    value_idx = index_graph['qid'].index(qid)
+                    heatmaps[plot][index_num][qid_idx] = index_graph[metric][value_idx]  # Assign the metric value
+                else:
+                    heatmaps[plot][index_num][qid_idx] = np.nan  # If qid is missing, fill with NaN (no color)
+
+        # heatmap for execution time
+        for qid_idx, qid in enumerate(all_qids):
+            if qid in index_graph['qid']:  # If qid exists in this group's data
+                value_idx = index_graph['qid'].index(qid)
+                heatmaps[-1][index_num][qid_idx] = index_graph["exec_time_s"][value_idx]
+            else:
+                heatmaps[-1][index_num][qid_idx] = np.nan  # If qid is missing, fill with NaN (no color)
+
+        # index_num += 1
+    for i, heatmap_data in enumerate(heatmaps):
+        sns.heatmap(heatmap_data, ax=axs[1, i], cmap="YlOrBr", annot=True, fmt=".1f",
+                    xticklabels=all_qids, yticklabels=group_names if i == 0 else False)
+
+    # Set x-axis labels for other plots if needed
+    for ax in axs.flat:
+        ax.set_xticks(range(len(all_qids)))  # Set the x-ticks to the categories
+        ax.set_xticklabels(all_qids, rotation=80)  # Rotate for better visibility
+
+    fig.legend(loc='upper right')
+    plt.tight_layout()
+    # Display the chart
+    plt.show()
 
 
 def read_query_file(file_pointer):
@@ -187,9 +251,7 @@ def read_query_file(file_pointer):
     return query_id, query_string
 
 
-def prepare_index(args):
-    global size_limit
-
+def prepare_index(args, size_limit):
     # name building: makes clear which indexing flag is used, to avoid repeating indexing with the same flags
     name = "_" + str(args[0]) + "_"
     if args[6] == "no":
@@ -215,8 +277,14 @@ def prepare_index(args):
         test_index_element.scoring = args[2]
         test_index_element.topk = args[3]
     if test_index_element.is_ready():
+        # check a random line (size_limit/2 is a line in the middle of the index)
         if not test_index_element.content_check(int(size_limit / 2)):
+            # if there is no content, start the dataset scan
             test_index_element.scan_dataset(size_limit, delete_after_compression=True)
+    else:
+        # if not ready, it's not been initialized correctly
+        print_log("CRITICAL Error during index setup", 0)
+        return None
 
     toc = time.perf_counter()
     print_log("===========================================================", 0)
@@ -224,60 +292,3 @@ def prepare_index(args):
     print_log(str(toc - tic), 0)
     print_log("===========================================================", 0)
     return QueryHandler(test_index_element)
-
-
-# size_limit = -1
-size_limit = 318
-
-print("Prepare indexes")
-query_handlers_catalogue = []
-name_template = "eval_index_" + str(size_limit) + "_"
-
-# config : name, query_alg, scoring_f, k, stem_skip, allow_stopword, compression
-config_set = []
-for query_algorithm in query_processing_algorithm_config:
-    for scoring_function in scoring_function_config:
-        for topk in k_returned_results_config:
-            for compression in compression_choices_config:
-                config_set.append(
-                    [name_template, query_algorithm, scoring_function, topk, True, True, compression])
-                config_set.append(
-                    [name_template, query_algorithm, scoring_function, topk, False, True,
-                     compression])
-                config_set.append(
-                    [name_template, query_algorithm, scoring_function, topk, True, False,
-                     compression])
-                config_set.append(
-                    [name_template, query_algorithm, scoring_function, topk, False, False,
-                     compression])
-
-for config in config_set[:1]:
-    query_handlers_catalogue.append(prepare_index(config))
-
-print("TREC EVALUATION")
-query_file = open(evaluation_trec_queries_2020_path, "r")
-
-trec_score_dicts_list = []
-query_count = 0
-next_qid, next_query = read_query_file(query_file)
-while True:
-    print_log("next query: " + next_query, 4)
-    for handler in query_handlers_catalogue:
-        for algorithm in search_into_file_algorithms:
-            result = handler.query(next_query, algorithm)
-            # result have this structure [(docid, score),....(docid, score)]
-            # example: [('116', 5.891602731662223), ('38', 0), ('221', 0), ('297', 0)]
-            run_dict = create_run_dict(next_qid, handler.index.name, result)
-            trec_score_dict = {}
-            if len(run_dict['query']) > 0:
-                trec_score_dict = evaluate_on_trec(run_dict)
-            trec_score_dict["name"] = handler.index.name
-            trec_score_dict["qid"] = next_qid
-            trec_score_dicts_list.append(trec_score_dict)
-    query_count += 1
-    next_qid, next_query = read_query_file(query_file)
-    if next_qid == -1:
-        break
-
-if size_limit == -1:
-    plot_metrics_line_charts(trec_score_dicts_list)

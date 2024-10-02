@@ -13,6 +13,8 @@ you should implement a dynamic pruning algorithm.
 '''
 import math
 
+import numpy as np
+
 from src.config import *
 from src.modules.compression import decode_posting_list
 from src.modules.postingList import postingList
@@ -52,10 +54,12 @@ class QueryHandler:
         self.doc_len_average = self.compute_docs_average(index_file.num_doc)  # len (stats.txt)
 
     def prepare_query(self, query_raw):
+        # takes a query (string, in natural language) and apply the same preprocessing steps applied to the dataset
         return preprocess_query_string(query_raw, stem_flag=self.index.skip_stemming,
                                        stop_flag=self.index.allow_stop_words)
 
-    def compute_docs_average(self, docs_count):  # len (stats.txt)
+    def compute_docs_average(self, docs_count):
+        # required for some scoring functions
         total_length_doc = 0
         with open(self.index.collection_statistics_path, 'rb') as f:
             while True:
@@ -68,11 +72,12 @@ class QueryHandler:
         return avg_length
 
     def query(self, query_string, search_file_algorithms):
+        # executes a whole query, starting from natural language and outputting the top k results
         print_log("received query", 3)
         query_terms = self.prepare_query(query_string)
         print_log("reading each posting lists for: ", 3)
         print_log(query_terms, 4)
-        raw_posting_lists, doc_freq_list = self.fetch_posting_lists(query_terms, search_file_algorithms)
+        raw_posting_lists = self.fetch_posting_lists(query_terms, search_file_algorithms)
         # raw_posting_lists is a list of strings, where each string is a
         print_log("converting post list to dictionaries", 3)
         posting_lists = make_posting_candidates(query_terms, raw_posting_lists)
@@ -81,11 +86,6 @@ class QueryHandler:
         print_log("calculating scores for related documents", 3)
         scores = self.compute_scoring_function(posting_lists, related_documents, search_file_algorithms)
         return get_top_k(self.index.topk, scores)
-
-    def extract_top_k(self, results):
-        # @param results: a dictionary of {doc_id,score}
-        ranked_list = {k: v for k, v in sorted(results.items(), key=lambda x: x[1])}
-        return ranked_list[0:self.index.topk]
 
     def fetch_posting_lists(self, query_terms, search_algorithm):
         '''
@@ -98,9 +98,10 @@ class QueryHandler:
         :param search_algorithm: pick an algorithm from the ones available (see config file)
         :param query_terms: list of words (strings) to search for
         :return:
+        @ res : offset (as number of chars) in the index file to find the posting list
+        @ doc_freq_array : number of documents that contains the token at least once
         '''
         res = []
-        doc_freq_array = []
         if not self.index.is_ready():
             print_log("Calling Search on unknown index", 0)
             print_log(self.index.index_file_path, 0)
@@ -116,7 +117,6 @@ class QueryHandler:
             for token in query_terms:  # for each token...
                 # search in lexicon for the offsets (start and finish in the inv.index file)
                 res_offset_interval, doc_freq = search_in_lexicon(f, token, search_algorithm)
-                doc_freq_array.append(doc_freq)
                 if doc_freq == -1:
                     # token not found in lexicon
                     res.append("")
@@ -125,27 +125,45 @@ class QueryHandler:
                     res_posting_string = search_in_index(index_file, res_offset_interval, self.index.compression)
                     # store the posting list for each word
                     res.append(res_posting_string)
-        return res, doc_freq_array
+        return res
 
-    def fetch_doc_size(self, key, search_file_algorithms):
+    def fetch_documents_size(self, keys, search_file_algorithms):
+        # get the document size for each docids
+        # @ param keys : list of docids
+        # @ param search_file_algorithms : algorithm to perform search in the documents statistics file
+        # @ return : dictionary of {docids : size}
+
         #    expected row from the collection statistics file:
         #    docid + collection_separator + docno + collection_separator + size + chunk_line_separator
-        doc_stats_file = open(self.index.collection_statistics_path, "r+")
-        size = search_in_doc_stats_file(doc_stats_file, key, search_file_algorithms)
-        # res is a string like "docid,docno,doc_size"
-        return int(size)
+        checkpoint = 0
+        results = {}
+        last_docid_read = np.nan
+        with open(self.index.collection_statistics_path, "r+") as doc_stats_file:
+            for docid in keys:
+                if docid == last_docid_read + 1:
+                    # consecutive read: skip the search phase
+                    checkpoint, line = next_GEQ_line(doc_stats_file, checkpoint + 1)
+                    # line is a string like "docid,docno,doc_size"
+                    size = line.split(",")[2].strip()
+                else:
+                    size, checkpoint = search_in_doc_stats_file(doc_stats_file, docid, search_file_algorithms,
+                                                                checkpoint)
+                last_docid_read = docid
+                results[docid] = int(size)
+
+        return results
 
     def detect_related_documents(self, posting_lists):
         # take all the token_keys from the first element
         if len(posting_lists) < 1:
-            print_log("no posting list found: ", 2)
-            print_log(posting_lists, 2)
+            print_log("no posting list found: ", 3)
+            print_log(posting_lists, 3)
             return []
         # initialize the candidates with the keys of the first posting list
         candidates = set(posting_lists[next(iter(posting_lists))].docids)
-        print_log("first set of candidates", 3)
-        print_log(candidates, 3)
-        for term in posting_lists:  # TODO: skip the first
+        print_log("first set of candidates", 4)
+        print_log(candidates, 4)
+        for term in posting_lists:  # the first one could be skipped, since it's a copy
             if self.index.algorithm == "conjunctive":
                 # intersection
                 candidates &= set(posting_lists[term].docids)
@@ -166,16 +184,17 @@ class QueryHandler:
         return sorted(list(candidates), key=lambda x: int(x))
 
     def compute_scoring_function(self, posting_lists, related_documents, search_file_algorithms):
-        # @ param query_terms : list of words in the query string
-        # @ param doc_count : number of documents in the index
-        # @ param doclen_avg : average of len of all the docs in the collection
-        # @ param scoring_f : string for scoring function (see configs for options)
-        # return the scored list of the relevant documents {docid,score}
+        # return the scored list of the relevant documents {docid,score} as a dictionary
         scores = {}
         if not related_documents:
             print_log("Cannot compute scores, no relevant document detected", 1)
             return {}
-        print(posting_lists)
+
+        # fetch doc size if necessary
+        doc_size = {}
+        if self.index.scoring in ["BM11", "BM25"]:
+            doc_size = self.fetch_documents_size(related_documents, search_file_algorithms)
+
         for token_key, postingListObj in posting_lists.items():
             # log ( N of docs in the collection / N of relevant docs )
             if postingListObj.size > 0:
@@ -195,13 +214,13 @@ class QueryHandler:
                     if self.index.scoring == "TFIDF":
                         w_t_d = weight_tfidf(idf, term_freq=postingListObj.freqs[i])
                     elif self.index.scoring == "BM11":
-                        doc_len = self.fetch_doc_size(postingListObj.docids[i], search_file_algorithms)
+                        doc_len = doc_size[postingListObj.docids[i]]
                         w_t_d = weight_bm11(idf, term_freq=postingListObj.freqs[i], avg=self.doc_len_average,
                                             doc_len=doc_len)
                     elif self.index.scoring == "BM15":
                         w_t_d = weight_bm15(idf, term_freq=postingListObj.freqs[i])
                     elif self.index.scoring == "BM25":
-                        doc_len = self.fetch_doc_size(postingListObj.docids[i], search_file_algorithms)
+                        doc_len = doc_size[postingListObj.docids[i]]
                         w_t_d = weight_bm25(idf, term_freq=postingListObj.freqs[i], avg=self.doc_len_average,
                                             doc_len=doc_len)
                     if postingListObj.docids[i] in scores.keys():
@@ -226,10 +245,7 @@ def make_posting_candidates(tokens, raw_posting_lists):
 
 
 def search_in_index(index_file, res_offset, compression):
-    # index_file.seek(7802)
-    # compressed_bytes = index_file.read()
-    # decoded_doc_ids, decoded_freq = decode_posting_list(compressed_bytes, config[6], encoding_type="unary")
-    # print(decoded_doc_ids)
+    # extract one posting list from the index file, given the position (offset = [start,stop])
     offset_start = int(res_offset[0])
     offset_stop = int(res_offset[1])
     nbytes = offset_stop - offset_start
@@ -285,7 +301,7 @@ def search_in_lexicon(lexicon, token, search_algorithm):
             last_read_position = line_pos
     else:
         print_log("Critical error: cannot search without a search algorithm", 0)
-        return []
+        return [], -1
 
     # search failed: return a blank
     if line_pos == -1:
@@ -301,20 +317,21 @@ def search_in_lexicon(lexicon, token, search_algorithm):
     return [start_offset, stop_offset], docfreq
 
 
-def search_in_doc_stats_file(doc_stats_file, docid, search_algorithm):
+def search_in_doc_stats_file(doc_stats_file, docid, search_algorithm, last_checkpoint=0):
     '''
-    open the lexicon file given one query word, and return its entry
+    open the doc stats file given one query word, and return its entry
     :param doc_stats_file: pointer to the doc stats file
     :param docid: docid to look for
     :param search_algorithm: user can choose any one search algorithm implemented
-    :return 1: offset interval <start,stop> relative to "token" for the lexicon file
-    :return 2: doc frequency: number of documents that contain the token at least once
+    :param last_checkpoint: skip some content at the beginning of the file if i know it doesnt contain the docid
+    :return: size of the document
     '''
 
     results = []
-    last_read_position = 0
+    last_read_position = last_checkpoint
     line_pos = -1
     line = ""
+
     if search_algorithm == "ternary":
         last_line_pos, last_line = get_last_line(doc_stats_file)
         line_pos, line = ternary_search(doc_stats_file, start_position=last_read_position, target_key=docid,
@@ -347,18 +364,18 @@ def search_in_doc_stats_file(doc_stats_file, docid, search_algorithm):
             last_read_position = line_pos
     else:
         print_log("Critical error: cannot search without a search algorithm", 0)
-        return []
+        return 0
 
     # search failed: return a blank
     if line_pos == -1:
-        print_log("Cannot find token " + str(docid) + " in doc stats file", 2)
-        return [], -1
+        print_log("Cannot find " + str(docid) + " in doc stats file", 2)
+        return 0
 
     # search success: return offset and docfreq
 
     doc_len = line.split(",")[2].strip()
 
-    return doc_len
+    return doc_len, line_pos
 
 
 def read_lexicon_line(line):
@@ -425,16 +442,3 @@ def weight_bm11(idf, term_freq, avg, doc_len):
     if term_freq == 0:
         return 0
     return idf * term_freq / (term_freq + BM_k_one * (doc_len / avg))
-
-
-'''
-def query(self, query_str, top_k=10):
-    query_terms = query_str.lower().split()
-    scores = defaultdict(float)
-    for term in query_terms:
-        if term in self.index:
-            for doc_id, _ in self.index[term]:
-                scores[doc_id] += self.compute_tfidf(term, doc_id)
-    ranked_docs = heapq.nlargest(top_k, scores.items(), key=lambda item: item[1])
-    return [(self.doc_ids[doc_id], score) for doc_id, score in ranked_docs]
-'''

@@ -1,11 +1,12 @@
 class postingList:
     def __init__(self, key):
-        self.key = key
-        self.current = 0
-        self.docids = []
-        self.freqs = []
-        self.size = -1
+        self.key = key  # token, string
+        self.current = 0  # pointer to current index, int
+        self.docids = []  # list of doc ids
+        self.freqs = []  # list of frequencies
+        self.size = -1  # len(docids) = len(freqs)
 
+    # functions: described in the laboratory slides
     def set_docids(self, d_list):
         self.docids = d_list
         self.size = min(len(self.docids), len(self.freqs))
