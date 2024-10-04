@@ -132,7 +132,7 @@ def open_dataset_multiprocess(flag, process_function, delete_chunks, delete_afte
         subindex_size = int(dataset_size / partitions_number)
         for index in range(partitions_number):
             pos, _ = next_GEQ_line(dataset, index * subindex_size + subindex_size)
-            interval_sub_index.append([pos])
+            interval_sub_index.append(pos)
         for i in range(partitions_number):
             proc = Process(target=read_portion_of_dataset, args=(
             dataset[interval_sub_index[i]:interval_sub_index[i + 1]], flag, interval_sub_index[i],
