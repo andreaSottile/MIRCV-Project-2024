@@ -15,14 +15,10 @@ from src.modules.utils import print_log
 from collections import Counter
 from src.config import *
 from multiprocessing import Process
-
-
-
-
+from src.modules.utils import get_last_line, ternary_search, get_row_id, print_log, set_search_interval, next_GEQ_line
 
 stop_words = None
 stemmer = None
-
 
 names = ['America', 'Europe', 'Africa']
 procs = []
@@ -38,65 +34,6 @@ for name in names:
 for proc in procs:
     proc.join()
 '''
-def test_index( index_name, flags):
-    tic = time.perf_counter()
-    test_index_element = load_from_disk(index_name)
-    if test_index_element is None:
-        test_index_element = index_setup(index_name, stemming_flag=flags[4], stop_words_flag=flags[5],
-                                         compression_flag="no",
-                                         k=flags[3], join_algorithm=flags[1], scoring_f=flags[2])
-    if test_index_element.is_ready():
-        if not test_index_element.content_check(int(flags[0] / 2)):
-            scan_dataset(flags[0], delete_after_compression=False)
-    else:
-        print("index not ready")
-
-def scan_dataset(self, limit_row_size=-1, delete_chunks=False, delete_after_compression=False):
-    # global lexicon_buffer
-    global posting_buffer
-    global posting_file_list
-    # global lexicon_file_list
-    print_log("starting dataset scan", priority=1)
-
-    # lexicon_buffer = []  # memory buffer
-    posting_buffer = []  # memory buffer
-    posting_file_list = []  # list of file names
-    # lexicon_file_list = []  # list of file names
-
-    print_log("scan limited to " + str(limit_row_size) + " rows", priority=4)
-    open_dataset(limit_row_size, self, add_document_to_index)
-    print_log("dataset scan completed", priority=3)
-
-    if len(posting_file_list) > 0:
-        # the last chunk is not full, but it's still important to write a file
-        close_chunk(self)
-
-        lines = merge_chunks(posting_file_list, self.index_file_path, self.lexicon_path,
-                             compression=self.compression,
-                             delete_after_merge=delete_chunks)
-    else:
-        # there is only one chunk, either for the size too big, the file count too small, or chunk splitting is
-        # disabled
-        lines = write_output_files(self.index_file_path, self.lexicon_path,
-                                   compression=self.compression)
-    self.index_len += lines
-
-    self.lexicon_len += lines
-    print_log("merged all chunks", priority=1)
-
-    if delete_after_compression:
-        print_log("deleted uncompressed index file", priority=1)
-        for filename in os.listdir(index_folder_path + self.name):
-            # look for files with name starting with "chunk"
-            if filename.startswith("chunk"):
-                file_path = os.path.join(index_folder_path + self.name, filename)
-                try:
-                    # delete file
-                    os.remove(file_path)
-                    print(f"File deleted: {file_path}")
-                except Exception as e:
-                    print(f"Error deleting {file_path}: {e}")
-    self.save_on_disk()
 
 def extract_dataset_from_tar(path):
     print_log("Opening tar.gz file", priority=2)
@@ -107,63 +44,104 @@ def extract_dataset_from_tar(path):
     print_log("tar.gz uncompression: finished", priority=4)
     return io.TextIOWrapper(dataset_raw, encoding='utf-8')
 
-def read_portion_of_dataset(dataset):
-    while True:
-        line = dataset.readline()
-        if line:
-            print_log("read progress: " + str(read_rows), priority=5)
-            if 0 < count_limit <= read_rows:
-                break
-            content = line.strip().split("\t")
-            if len(content) == 2:
-                process_dataset_row(read_rows, content[0], content[1], process_function, index)
-            else:
-                print_log("invalid line len at row " + str(read_rows), priority=4)
 
-            read_rows += 1
-        else:
-            break
+def read_portion_of_dataset(dataset, flags, start_subindex_pos, end_subindex_pos, process_function, delete_chunks,
+                            delete_after_compression):
+    read_rows = 0
+    posting_buffer = []  # memory buffer
+    posting_file_list = []  # list of file names
+    index_name = f"indt_multiproc_stem{flags[4]}_stopword{flags[5]}_{start_subindex_pos}_{end_subindex_pos}"
+    test_index_element = load_from_disk(index_name)
+    if test_index_element is None:
+        test_index_element = index_setup(index_name, stemming_flag=flags[4], stop_words_flag=flags[5],
+                                         compression_flag="no",
+                                         k=flags[3], join_algorithm=flags[1], scoring_f=flags[2])
+    if test_index_element.is_ready():
+        if not test_index_element.content_check(int(flags[0] / 2)):
+
+            # lexicon_buffer = []  # memory buffer
+            # lexicon_file_list = []  # list of file names
+
+            print_log("scan limited to " + str(flags[0]) + " rows", priority=4)
+            while True:
+                line = dataset.readline()
+                if line:
+                    print_log("read progress: " + str(read_rows), priority=5)
+                    if 0 < flags[0] <= read_rows:
+                        break
+                    content = line.strip().split("\t")
+                    if len(content) == 2:
+                        posting_buffer, posting_file_list = process_dataset_row(read_rows, content[0], content[1],
+                                                                                posting_buffer, posting_file_list,
+                                                                                process_function, test_index_element)
+                    else:
+                        print_log("invalid line len at row " + str(read_rows), priority=4)
+
+                    read_rows += 1
+                else:
+                    break
+
+            print_log("dataset scan completed", priority=3)
+
+            if len(posting_file_list) > 0:
+                # the last chunk is not full, but it's still important to write a file
+                posting_buffer, posting_file_list = close_chunk(test_index_element)
+
+                lines = merge_chunks(posting_file_list, test_index_element.index_file_path,
+                                     test_index_element.lexicon_path,
+                                     compression=test_index_element.compression,
+                                     delete_after_merge=delete_chunks)
+            else:
+                # there is only one chunk, either for the size too big, the file count too small, or chunk splitting is
+                # disabled
+                lines = write_output_files(test_index_element.index_file_path, test_index_element.lexicon_path,
+                                           compression=test_index_element.compression)
+            test_index_element.index_len += lines
+
+            test_index_element.lexicon_len += lines
+            print_log("merged all chunks", priority=1)
+
+            if delete_after_compression:
+                print_log("deleted uncompressed index file", priority=1)
+                for filename in os.listdir(index_folder_path + test_index_element.name):
+                    # look for files with name starting with "chunk"
+                    if filename.startswith("chunk"):
+                        file_path = os.path.join(index_folder_path + test_index_element.name, filename)
+                        try:
+                            # delete file
+                            os.remove(file_path)
+                            print(f"File deleted: {file_path}")
+                        except Exception as e:
+                            print(f"Error deleting {file_path}: {e}")
+            test_index_element.save_on_disk()
+    else:
+        print("index not ready")
     print_log("read finished", priority=4)
 
 
-def open_dataset(count_limit=-1, index=None, process_function=None):
-    if count_limit > 0 and 0 < limit_input_rows_config < count_limit:
-        count_limit = limit_input_rows_config
+def open_dataset_multiprocess(flag, process_function, delete_chunks, delete_after_compression):
     # reset row counter
-    read_rows = 0
+    global procs
+    partitions_number = 8
     print_log("opening dataset file", priority=3)
+    interval_sub_index = [0]
     if collection_path_config.endswith(".gz"):
         # working with compressed file, required uncompression
         dataset = extract_dataset_from_tar(collection_path_config)
-        dataset_size= 3061567853
-
-        for name in names:
-            # print(name)
-            proc = Process(target=read_portion_of_dataset, args=(name,))
+        dataset_size = 3061567853
+        subindex_size = int(dataset_size / partitions_number)
+        for index in range(partitions_number):
+            pos, _ = next_GEQ_line(dataset, index * subindex_size + subindex_size)
+            interval_sub_index.append([pos])
+        for i in range(partitions_number):
+            proc = Process(target=read_portion_of_dataset, args=(
+            dataset[interval_sub_index[i]:interval_sub_index[i + 1]], flag, interval_sub_index[i],
+            interval_sub_index[i + 1], process_function, delete_chunks, delete_after_compression,))
             procs.append(proc)
             proc.start()
 
-    elif collection_path_config.endswith(".tsv"):
-        # working with .tsv file
-        print_log("Opening .tsv file", priority=2)
 
-        dataset = pd.read_csv(collection_path_config, sep='\t', header=None)
-        for line in dataset.values:
-            if 0 < count_limit <= read_rows:
-                break
-            print(line)
-            if len(line) == 2:
-                process_dataset_row(read_rows, line[0], line[1], process_function, index)
-            else:
-                print_log("invalid line len at row " + str(read_rows), priority=4)
-
-            read_rows += 1
-        print_log("read finished", priority=4)
-
-    print_log("input phase done, returning to parsing", priority=3)
-    return "rows read from dataset: " + str(read_rows)
-
-def process_dataset_row(d_id, d_no, d_text, process_function=None, index=None):
+def process_dataset_row(d_id, d_no, d_text, posting_buffer, posting_file_list, process_function=None, index=None):
     if d_id % 100000 == 0:
         print_log("processed " + str(d_id), priority=1)
     else:
@@ -174,7 +152,8 @@ def process_dataset_row(d_id, d_no, d_text, process_function=None, index=None):
         if d_text:
             if index is not None and process_function is not None:
                 # index structure is created outside
-                process_function(index, [d_id, d_no, d_text])
+                posting_buffer, posting_file_list = process_function(index, [d_id, d_no, d_text], posting_buffer,
+                                                                     posting_file_list)
             else:
                 # this function is just a print if not associated with an index
                 print(d_text)
@@ -182,15 +161,45 @@ def process_dataset_row(d_id, d_no, d_text, process_function=None, index=None):
             print_log("no text found for docid " + str(d_id), priority=3)
     else:  # invalid doc id
         print_log("found invalid docid near row " + str(d_id), priority=3)
+    return posting_buffer, posting_file_list
 
 
-
-def close_chunk(index):
-    global posting_file_list
-    new_chunk_post = index.create_posting_chunk("chunk_posting_" + str(len(posting_file_list)) + file_format)
+def close_chunk(index, posting_buffer, posting_file_list):
+    new_chunk_post, posting_buffer, posting_file_list = create_posting_chunk(index, "chunk_posting_" + str(
+        len(posting_file_list)) + file_format, posting_buffer, posting_file_list)
     posting_file_list.append(new_chunk_post)
     print_log("chunks created: ", 5)
     print_log(posting_file_list, 5)
+    return posting_buffer, posting_file_list
+
+
+def create_posting_chunk(index, filename, posting_buffer, posting_file_list):
+    # write a chunk of posting lists to disk
+    # @ param filename: output file path (complete with file format)
+    # posting_buffer is a list where each element have this structure:
+    #     [token_id, [docid, token_count]]
+
+    # MANDATORY: every chunk must be ordinated
+    posting_buffer_sorted = sorted(posting_buffer, key=lambda x: x[0])
+    chunk_name = index_folder_path + index.name + "/" + filename
+    try:
+        with open(chunk_name, "w") as file:
+            for row in posting_buffer_sorted:
+                row_string = str(row[0]) + posting_separator
+                for pair in row[1:]:
+                    element = str(pair[0]) + docid_separator + str(pair[1])
+                    if pair == row[-1]:
+                        row_string += element
+                    else:
+                        row_string += element + element_separator
+                file.write(row_string + chunk_line_separator)
+        posting_buffer = []
+    except IOError:
+        print(IOError)
+        print_log("Writing new posting file chunk to file. dumping chunk here: ", 5)
+        print_log(posting_buffer_sorted, 5)
+    return chunk_name, posting_buffer, posting_file_list
+
 
 def clean_text(text):
     # remove punctuation signs (keep only letters and numbers)
@@ -203,12 +212,15 @@ def clean_text(text):
     cleaned_text = cleaned_text.lower().strip()
     return cleaned_text
 
+
 def tokenizer(text):
     # transform a text into a list of tokens (words)
     tokens = []
     for word in text.split(" "):
         tokens.append(word)
     return tokens
+
+
 def remove_stopwords(tokens):
     # clean a list of tokens using an external list of stop words (language dependant)
     global stop_words
@@ -223,6 +235,7 @@ def remove_stopwords(tokens):
             cleaned.append(word)
     return cleaned
 
+
 def stemming(tokens):
     # perform stemming on a list of tokens
     global stemmer
@@ -233,6 +246,7 @@ def stemming(tokens):
         stems.append(stemmer.stem(word))
     return stems
 
+
 def preprocess_text(text, skip_stemming=True, allow_stop_words=True):
     # execute all preprocessing steps, as required by flags
     clean = clean_text(text)
@@ -242,9 +256,10 @@ def preprocess_text(text, skip_stemming=True, allow_stop_words=True):
     if not skip_stemming:
         tokens = stemming(tokens)
     return tokens
-def add_document_to_index(index, args):
+
+
+def add_document_to_index(index, posting_buffer, posting_file_list, args):
     # this function is called for each document (row) in the collection
-    global posting_file_list  # list of file names
     # global lexicon_file_list  # list of file names
     if len(args) != 3:
         print_log("CRITICAL ERROR: missing arguments to add document to index : " + str(args), 0)
@@ -271,10 +286,12 @@ def add_document_to_index(index, args):
     index.add_to_collection_stats(docid, docno, word_count)
     for token_id, token_count in token_counts:
         # inverted index is based on posting lists
-        full = add_posting_list(token_id, token_count, docid)
+        full, posting_buffer, posting_file_list = add_posting_list(token_id, token_count, docid, posting_buffer,
+                                                                   posting_file_list)
         if full:  # this check is always false without using the chunk splitting
             # write chunk in a file, and clean the memory buffer to move on
-            close_chunk(index)
+            posting_buffer, posting_file_list = close_chunk(index, posting_buffer, posting_file_list)
+    return posting_buffer, posting_file_list
 
     '''
      Possible improvement: disaster recovery
@@ -284,9 +301,10 @@ def add_document_to_index(index, args):
      the "merge" function infer the files itself. it could work with os.listdir, making a regex on the naming pattern 
      we have used to rebuild lexicon_file_list and posting_file_list.
     '''
-def add_posting_list(token_id, token_count, docid):
+
+
+def add_posting_list(token_id, token_count, docid, posting_buffer, posting_file_list):
     # add new entries in posting list.
-    global posting_buffer
     # print_log("adding new posting list: " + str(token_id), priority=5)
     stats = [docid, token_count]
     found_token = False
@@ -305,12 +323,13 @@ def add_posting_list(token_id, token_count, docid):
     if not found_token:
         posting_buffer.append([token_id, stats])
     if index_chunk_size < 1:  # no limit on the chunk size
-        return False
+        return False, posting_buffer, posting_file_list
     if len(posting_buffer) > index_chunk_size:
         print_log("posting memory buffer is full", priority=4)
-        return True  # chunk is big, time to write it on disk
+        return True, posting_buffer, posting_file_list  # chunk is big, time to write it on disk
     else:
-        return False  # no need to write it on disk yet
+        return False, posting_buffer, posting_file_list  # no need to write it on disk yet
+
 
 def merge_chunks(file_list, index_file_path, lexicon_file_path, compression="no", delete_after_merge=True):
     written_lines = 0
@@ -397,6 +416,7 @@ def merge_chunks(file_list, index_file_path, lexicon_file_path, compression="no"
     lexicon_file.close()
     return written_lines
 
+
 def make_posting_list(list_doc_id, list_freq, compression="no"):
     # Step 1: Encode the number of doc IDs
     combined = list(zip(list_doc_id, list_freq))
@@ -450,6 +470,7 @@ def bit_stream_to_bytes(bit_stream):
 
     return bytes(byte_array)
 
+
 def to_unary(n):
     # Unary encoding: n-1 ones followed by a final zero
     return '1' * (n - 1) + '0'
@@ -468,6 +489,7 @@ def to_gamma(n):
 
     # Combine the two parts
     return unary_length + offset
+
 
 def count_token_occurrences(tokens):
     return Counter(tokens)
@@ -501,4 +523,4 @@ def write_output_files(index_file_path, lexicon_path, compression="no"):
 # disjunctive test
 config = [-1, "query_processing_algorithm_config[1]", "scoring_function_config[0]", 4, True, True, "No"]
 
-test_index( "indt_Prova_", config)
+open_dataset_multiprocess(config, "add_document_to_index", delete_chunks=False, delete_after_compression=False)
