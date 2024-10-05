@@ -45,9 +45,12 @@ def extract_dataset_from_tar(path):
     return io.TextIOWrapper(dataset_raw, encoding='utf-8')
 
 
-def read_portion_of_dataset(dataset, flags, start_subindex_pos, end_subindex_pos, process_function, delete_chunks,
+def read_portion_of_dataset(collection_path_config, flags, start_subindex_pos, end_subindex_pos, process_function, delete_chunks,
                             delete_after_compression):
     read_rows = 0
+    dataset = extract_dataset_from_tar(collection_path_config)
+    start_subindex_pos, _ = next_GEQ_line(dataset, start_subindex_pos)
+    dataset.seek(start_subindex_pos)
     posting_buffer = []  # memory buffer
     posting_file_list = []  # list of file names
     index_name = f"indt_multiproc_stem{flags[4]}_stopword{flags[5]}_{start_subindex_pos}_{end_subindex_pos}"
@@ -67,7 +70,7 @@ def read_portion_of_dataset(dataset, flags, start_subindex_pos, end_subindex_pos
                 line = dataset.readline()
                 if line:
                     print_log("read progress: " + str(read_rows), priority=5)
-                    if 0 < flags[0] <= read_rows:
+                    if 0 < flags[0] <= read_rows or dataset.tell() >= end_subindex_pos:
                         break
                     content = line.strip().split("\t")
                     if len(content) == 2:
@@ -94,7 +97,7 @@ def read_portion_of_dataset(dataset, flags, start_subindex_pos, end_subindex_pos
             else:
                 # there is only one chunk, either for the size too big, the file count too small, or chunk splitting is
                 # disabled
-                lines = write_output_files(test_index_element.index_file_path, test_index_element.lexicon_path,
+                lines = write_output_files(test_index_element.index_file_path, test_index_element.lexicon_path,posting_buffer, posting_file_list,
                                            compression=test_index_element.compression)
             test_index_element.index_len += lines
 
@@ -122,23 +125,29 @@ def read_portion_of_dataset(dataset, flags, start_subindex_pos, end_subindex_pos
 def open_dataset_multiprocess(flag, process_function, delete_chunks, delete_after_compression):
     # reset row counter
     global procs
-    partitions_number = 8
+    partitions_number = 4
     print_log("opening dataset file", priority=3)
     interval_sub_index = [0]
     if collection_path_config.endswith(".gz"):
         # working with compressed file, required uncompression
-        dataset = extract_dataset_from_tar(collection_path_config)
         dataset_size = 3061567853
         subindex_size = int(dataset_size / partitions_number)
         for index in range(partitions_number):
-            pos, _ = next_GEQ_line(dataset, index * subindex_size + subindex_size)
+            pos = index * subindex_size + subindex_size
             interval_sub_index.append(pos)
         for i in range(partitions_number):
             proc = Process(target=read_portion_of_dataset, args=(
-            dataset[interval_sub_index[i]:interval_sub_index[i + 1]], flag, interval_sub_index[i],
+            collection_path_config, flag, interval_sub_index[i],
             interval_sub_index[i + 1], process_function, delete_chunks, delete_after_compression,))
             procs.append(proc)
             proc.start()
+            #read_portion_of_dataset(
+            #dataset, flag, interval_sub_index[i],
+            #interval_sub_index[i + 1], process_function, delete_chunks, delete_after_compression)
+
+        # complete the processes
+        for proc in procs:
+            proc.join()
 
 
 def process_dataset_row(d_id, d_no, d_text, posting_buffer, posting_file_list, process_function=None, index=None):
@@ -258,7 +267,7 @@ def preprocess_text(text, skip_stemming=True, allow_stop_words=True):
     return tokens
 
 
-def add_document_to_index(index, posting_buffer, posting_file_list, args):
+def add_document_to_index(index, args,posting_buffer, posting_file_list):
     # this function is called for each document (row) in the collection
     # global lexicon_file_list  # list of file names
     if len(args) != 3:
@@ -495,8 +504,7 @@ def count_token_occurrences(tokens):
     return Counter(tokens)
 
 
-def write_output_files(index_file_path, lexicon_path, compression="no"):
-    global posting_buffer
+def write_output_files(index_file_path, lexicon_path,posting_buffer, posting_file_list, compression="no"):
     written_lines = 0
 
     # MANDATORY: every chunk must be ordinated
@@ -521,6 +529,6 @@ def write_output_files(index_file_path, lexicon_path, compression="no"):
 
 
 # disjunctive test
-config = [-1, "query_processing_algorithm_config[1]", "scoring_function_config[0]", 4, True, True, "No"]
-
-open_dataset_multiprocess(config, "add_document_to_index", delete_chunks=False, delete_after_compression=False)
+config = [1000, "query_processing_algorithm_config[1]", "scoring_function_config[0]", 4, True, True, "No"]
+if __name__ == "__main__":
+    open_dataset_multiprocess(config, add_document_to_index, delete_chunks=False, delete_after_compression=False)
