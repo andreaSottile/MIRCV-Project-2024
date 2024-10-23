@@ -3,7 +3,7 @@ import time
 from src.config import *
 import seaborn as sns
 from src.modules.InvertedIndex import load_from_disk, index_setup
-from src.modules.queryHandler import QueryHandler
+from src.modules.QueryHandler import QueryHandler
 from src.modules.utils import print_log
 
 import matplotlib

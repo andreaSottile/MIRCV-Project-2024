@@ -1,51 +1,20 @@
-import time
 import os
-import io
-import tarfile
 
-import pandas as pd
-from src.config import scoring_function_config, query_processing_algorithm_config, search_into_file_algorithms
 from src.modules.InvertedIndex import index_setup, load_from_disk
-from src.modules.queryHandler import QueryHandler
-import re
-import nltk
-from nltk.stem import PorterStemmer
-from nltk.corpus import stopwords
-from src.modules.utils import print_log
-from collections import Counter
+from src.modules.compression import to_gamma, to_unary, bit_stream_to_bytes
+from src.modules.document_processing import extract_dataset_from_tar
+from src.modules.preprocessing import preprocess_text, count_token_occurrences
+
 from src.config import *
 from multiprocessing import Process
-from src.modules.utils import get_last_line, ternary_search, get_row_id, print_log, set_search_interval, next_GEQ_line
+from src.modules.utils import print_log, next_GEQ_line
 
 stop_words = None
 stemmer = None
 
-names = ['America', 'Europe', 'Africa']
-procs = []
-'''
-# instantiating process with arguments
-for name in names:
-    # print(name)
-    proc = Process(target=print_func, args=(name,))
-    procs.append(proc)
-    proc.start()
 
-# complete the processes
-for proc in procs:
-    proc.join()
-'''
-
-def extract_dataset_from_tar(path):
-    print_log("Opening tar.gz file", priority=2)
-    tar = tarfile.open(path, "r:gz")
-    dataset_compressed = tar.getmember("collection.tsv")
-    print_log("tar.gz uncompression: starting", priority=4)
-    dataset_raw = tar.extractfile(dataset_compressed)
-    print_log("tar.gz uncompression: finished", priority=4)
-    return io.TextIOWrapper(dataset_raw, encoding='utf-8')
-
-
-def read_portion_of_dataset(collection_path_config, flags, start_subindex_pos, end_subindex_pos, process_function, delete_chunks,
+def read_portion_of_dataset(collection_path_config, flags, start_subindex_pos, end_subindex_pos, process_function,
+                            delete_chunks,
                             delete_after_compression):
     read_rows = 0
     dataset = extract_dataset_from_tar(collection_path_config)
@@ -97,7 +66,8 @@ def read_portion_of_dataset(collection_path_config, flags, start_subindex_pos, e
             else:
                 # there is only one chunk, either for the size too big, the file count too small, or chunk splitting is
                 # disabled
-                lines = write_output_files(test_index_element.index_file_path, test_index_element.lexicon_path,posting_buffer, posting_file_list,
+                lines = write_output_files(test_index_element.index_file_path, test_index_element.lexicon_path,
+                                           posting_buffer, posting_file_list,
                                            compression=test_index_element.compression)
             test_index_element.index_len += lines
 
@@ -137,13 +107,13 @@ def open_dataset_multiprocess(flag, process_function, delete_chunks, delete_afte
             interval_sub_index.append(pos)
         for i in range(partitions_number):
             proc = Process(target=read_portion_of_dataset, args=(
-            collection_path_config, flag, interval_sub_index[i],
-            interval_sub_index[i + 1], process_function, delete_chunks, delete_after_compression,))
+                collection_path_config, flag, interval_sub_index[i],
+                interval_sub_index[i + 1], process_function, delete_chunks, delete_after_compression,))
             procs.append(proc)
             proc.start()
-            #read_portion_of_dataset(
-            #dataset, flag, interval_sub_index[i],
-            #interval_sub_index[i + 1], process_function, delete_chunks, delete_after_compression)
+            # read_portion_of_dataset(
+            # dataset, flag, interval_sub_index[i],
+            # interval_sub_index[i + 1], process_function, delete_chunks, delete_after_compression)
 
         # complete the processes
         for proc in procs:
@@ -210,64 +180,7 @@ def create_posting_chunk(index, filename, posting_buffer, posting_file_list):
     return chunk_name, posting_buffer, posting_file_list
 
 
-def clean_text(text):
-    # remove punctuation signs (keep only letters and numbers)
-    pattern = r'[^a-zA-Z0-9\s]'
-    cleaned_text = re.sub(pattern, ' ', text)
-
-    # Replace multiple spaces with a single space
-    cleaned_text = re.sub(r'\s+', ' ', cleaned_text)
-    # Strip leading and trailing spaces and convert to lower case
-    cleaned_text = cleaned_text.lower().strip()
-    return cleaned_text
-
-
-def tokenizer(text):
-    # transform a text into a list of tokens (words)
-    tokens = []
-    for word in text.split(" "):
-        tokens.append(word)
-    return tokens
-
-
-def remove_stopwords(tokens):
-    # clean a list of tokens using an external list of stop words (language dependant)
-    global stop_words
-    if stop_words is None:
-        stop_words = set(stopwords.words('english'))
-        if not stop_words:
-            nltk.download('stopwords')
-            stop_words = set(stopwords.words('english'))
-    cleaned = []
-    for word in tokens:
-        if word not in stop_words:
-            cleaned.append(word)
-    return cleaned
-
-
-def stemming(tokens):
-    # perform stemming on a list of tokens
-    global stemmer
-    if stemmer is None:
-        stemmer = PorterStemmer()
-    stems = []
-    for word in tokens:
-        stems.append(stemmer.stem(word))
-    return stems
-
-
-def preprocess_text(text, skip_stemming=True, allow_stop_words=True):
-    # execute all preprocessing steps, as required by flags
-    clean = clean_text(text)
-    tokens = tokenizer(clean)
-    if not allow_stop_words:
-        tokens = remove_stopwords(tokens)
-    if not skip_stemming:
-        tokens = stemming(tokens)
-    return tokens
-
-
-def add_document_to_index(index, args,posting_buffer, posting_file_list):
+def add_document_to_index(index, args, posting_buffer, posting_file_list):
     # this function is called for each document (row) in the collection
     # global lexicon_file_list  # list of file names
     if len(args) != 3:
@@ -466,45 +379,7 @@ def make_posting_list(list_doc_id, list_freq, compression="no"):
         return posting_string
 
 
-def bit_stream_to_bytes(bit_stream):
-    # Pad the bit stream so that its length is a multiple of 8
-    padding_length = (8 - len(bit_stream) % 8) % 8
-    bit_stream = bit_stream + '1' * padding_length
-
-    # Convert each 8-bit chunk into a byte
-    byte_array = bytearray()
-    for i in range(0, len(bit_stream), 8):
-        byte_chunk = bit_stream[i:i + 8]
-        byte_array.append(int(byte_chunk, 2))
-
-    return bytes(byte_array)
-
-
-def to_unary(n):
-    # Unary encoding: n-1 ones followed by a final zero
-    return '1' * (n - 1) + '0'
-
-
-def to_gamma(n):
-    # Compute the binary representation of n
-    binary_repr = bin(n)[2:]  # Binary representation without the '0b' prefix
-
-    # First part: Unary encoding of the length of the binary representation
-    length = len(binary_repr)
-    unary_length = to_unary(length)
-
-    # Second part: Offset, i.e., the binary representation without the most significant bit
-    offset = binary_repr[1:]
-
-    # Combine the two parts
-    return unary_length + offset
-
-
-def count_token_occurrences(tokens):
-    return Counter(tokens)
-
-
-def write_output_files(index_file_path, lexicon_path,posting_buffer, posting_file_list, compression="no"):
+def write_output_files(index_file_path, lexicon_path, posting_buffer, posting_file_list, compression="no"):
     written_lines = 0
 
     # MANDATORY: every chunk must be ordinated
@@ -526,9 +401,3 @@ def write_output_files(index_file_path, lexicon_path,posting_buffer, posting_fil
                     posting_offset) + chunk_line_separator)
 
     return written_lines
-
-
-# disjunctive test
-config = [1000, "query_processing_algorithm_config[1]", "scoring_function_config[0]", 4, True, True, "No"]
-if __name__ == "__main__":
-    open_dataset_multiprocess(config, add_document_to_index, delete_chunks=False, delete_after_compression=False)

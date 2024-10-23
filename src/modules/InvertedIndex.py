@@ -17,7 +17,7 @@ from src.config import *
 import os
 
 from src.modules.compression import to_unary, to_gamma, bit_stream_to_bytes
-from src.modules.documentProcessing import open_dataset
+from src.modules.document_processing import open_dataset
 from src.modules.preprocessing import preprocess_text, count_token_occurrences
 from src.modules.utils import readline_with_strip, print_log
 

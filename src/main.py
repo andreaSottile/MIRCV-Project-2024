@@ -5,7 +5,7 @@ from src.config import file_format, index_config_path
 from src.modules.InvertedIndex import load_from_disk
 from src.modules.interface import handle_selection, print_menu, update_parameter, print_query_result, is_restart_needed, \
     get_index_name, setup_main_index, get_index_title, user_write_parameters, get_parameter
-from src.modules.queryHandler import QueryHandler
+from src.modules.QueryHandler import QueryHandler
 
 # Initialize colorama
 init(autoreset=True)

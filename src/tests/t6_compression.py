@@ -1,7 +1,7 @@
 from src.config import *
 import time
 from src.modules.InvertedIndex import index_setup, load_from_disk
-from src.modules.queryHandler import QueryHandler
+from src.modules.QueryHandler import QueryHandler
 
 
 def test_index(index_name, flags, compression):

@@ -13,7 +13,7 @@ from colorama import Fore
 from src.config import query_processing_algorithm_config, scoring_function_config, index_config_path, file_format, \
     search_into_file_algorithms
 from src.modules.InvertedIndex import load_from_disk, index_setup
-from src.modules.queryHandler import QueryHandler
+from src.modules.QueryHandler import QueryHandler
 
 file_count = 500  # user is going to edit this
 method = 'disjunctive'

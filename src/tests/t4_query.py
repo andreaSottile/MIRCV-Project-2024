@@ -2,7 +2,7 @@ import time
 
 from src.config import scoring_function_config, query_processing_algorithm_config, search_into_file_algorithms
 from src.modules.InvertedIndex import index_setup, load_from_disk
-from src.modules.queryHandler import QueryHandler
+from src.modules.QueryHandler import QueryHandler
 
 i = 0
 

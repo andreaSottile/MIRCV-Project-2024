@@ -17,7 +17,7 @@ import numpy as np
 
 from src.config import *
 from src.modules.compression import decode_posting_list
-from src.modules.postingList import postingList
+from src.modules.PostingList import postingList
 from src.modules.preprocessing import preprocess_text
 from src.modules.utils import get_last_line, ternary_search, get_row_id, print_log, set_search_interval, next_GEQ_line
 
