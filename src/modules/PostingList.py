@@ -1,4 +1,4 @@
-class postingList:
+class PostingList:
     def __init__(self, key):
         self.key = key  # token, string
         self.current = 0  # pointer to current index, int

@@ -17,7 +17,7 @@ import numpy as np
 
 from src.config import *
 from src.modules.compression import decode_posting_list
-from src.modules.PostingList import postingList
+from src.modules.PostingList import PostingList
 from src.modules.preprocessing import preprocess_text
 from src.modules.utils import get_last_line, ternary_search, get_row_id, print_log, set_search_interval, next_GEQ_line
 
@@ -393,8 +393,9 @@ def preprocess_query_string(query_raw, stem_flag, stop_flag):
 
 def create_posting_list_object(token_key, posting_string):
     # convert a line from the index file to a dictionary with the useful info
-    posting_list_obj = postingList(token_key)
+    posting_list_obj = PostingList(token_key)
     if posting_string != '':
+        # posting string: d,d,d,d,d,d,d f,f,f,f,f,f,f
         doc_id_list = posting_string.split()[0].split(",")
         freq_list = posting_string.split()[1].split(",")
         posting_list_obj.set_docids(doc_id_list)

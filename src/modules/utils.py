@@ -263,3 +263,32 @@ def ternary_search(file_pointer, start_position, target_key, delimiter, end_posi
         low_key = pivot_2_key
     print_log("found nothing", 4)
     return -1, ""
+
+
+def read_file_to_dict(file_path, separator=',', output_type="mix"):
+    # read all files in a folder, and return a list of dictionaries (one for each file)
+    # @ param file_path: file to open
+    # @ param separator: char used to split the values in the document
+    # @ param output_type: "int" or "str" to cast
+    # @ return: list of dicts [{(keys: first colulm of doc1),(values: other two columns)},...]
+    file_data = {}
+    with open(file_path, 'r') as file:
+        for line in file:
+            line = line.strip()
+            if line:
+                parts = line.split(separator)
+                # expecting to find 3 values
+                # Lexicon.txt row: token, token_freq, offset
+                # Stats.txt row: docid(local), docname, docsize
+                key = str(parts[0])
+                # optional: cast the values
+                if output_type == "str":
+                    value = [str(parts[1]), str(parts[2])]
+                elif output_type == "int":
+                    value = [int(parts[1]), int(parts[2])]
+                else:
+                    value = [str(parts[1]), int(parts[2])]
+                # each value has a tuple as value
+                file_data[key] = value
+    # remember: docids are not in order
+    return file_data
