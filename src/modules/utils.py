@@ -292,3 +292,43 @@ def read_file_to_dict(file_path, separator=',', output_type="mix"):
                 file_data[key] = value
     # remember: docids are not in order
     return file_data
+
+
+def find_missing_contents(ranges):
+    # Order and merge the intervals
+    merged_ranges = merge_ranges(ranges)
+
+    # Find the maximum number between all intervals
+    max_value = max(r[1] for r in merged_ranges)
+
+    missing_numbers = []
+    current = 0
+
+    for range_start, range_end in merged_ranges:
+        # Find the numbers between `current` and the actual intervals
+        if current < range_start:
+            missing_numbers.extend(range(current, range_start))
+
+        # Next point to run
+        current = max(current, range_end + 1)
+
+    # Add any missing numbers after the last interval up to `max_value`
+    if current <= max_value:
+        missing_numbers.extend(range(current, max_value + 1))
+
+    return missing_numbers
+
+
+def merge_ranges(ranges):
+    # Order and merge the intervals
+    ranges.sort()
+    merged = [ranges[0]]
+
+    for current in ranges[1:]:
+        last = merged[-1]
+        if current[0] <= last[1] + 1:
+            merged[-1] = [last[0], max(last[1], current[1])]
+        else:
+            merged.append(current)
+
+    return merged

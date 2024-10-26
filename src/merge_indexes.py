@@ -1,8 +1,9 @@
 import os
 
 from src.config import index_folder_path, collection_separator, posting_separator, element_separator
-from src.modules.InvertedIndex import make_posting_list
-from src.modules.utils import read_file_to_dict
+from src.modules.InvertedIndex import make_posting_list, index_setup, add_document_to_index, close_chunk
+from src.modules.document_processing import fetch_data_row_from_collection
+from src.modules.utils import read_file_to_dict, find_missing_contents
 
 '''
 merge two (or more) indexes in one. this program is used to merge portions made with multiprocessing.
@@ -19,6 +20,9 @@ indexes_list = []
 write_stats_file_flag = False  # skip a step if it's already done
 compression = "no"
 
+index_stem = ""
+index_stopw = ""
+
 output_lexicon_path = source_folder + "/lexicon.txt"
 output_stats_path = source_folder + "/stats.txt"
 output_index_path = source_folder + "/index.txt"
@@ -31,12 +35,23 @@ print(source_folder)
 
 print("opening input files")
 # OPEN all input files
+global_content = []
 for f in os.scandir(merge_folder):
-    lexicons_list.append(open(merge_folder + "/" + f.name + "/lexicon.txt", "r"))
-    indexes_list.append(open(merge_folder + "/" + f.name + "/index.txt", "r"))
+    if f.name.endswith(".txt"):
+        with open(f.path, "rb") as cfg_file:
+            content = cfg_file.readlines()
+            local_content = content[4].decode("utf-8").strip().split(",")
+            if index_stem == "":
+                index_stem = content[1].decode("utf-8").strip() == "skip_stem"
+            if index_stopw == "":
+                index_stopw = content[2].decode("utf-8").strip() == "allow_sw"
+            global_content.append([int(local_content[0]), int(local_content[1])])
+    else:
+        lexicons_list.append(open(merge_folder + "/" + f.name + "/lexicon.txt", "r"))
+        indexes_list.append(open(merge_folder + "/" + f.name + "/index.txt", "r"))
 
-    global_stats_list.append(
-        read_file_to_dict(merge_folder + "/" + f.name + "/stats.txt", separator=collection_separator))
+        global_stats_list.append(
+            read_file_to_dict(merge_folder + "/" + f.name + "/stats.txt", separator=collection_separator))
 
 print("checking collection integrity")
 # TODO
@@ -44,6 +59,25 @@ print("checking collection integrity")
 # soluzione: creare un nuovo indice che contiene un documento mancante (ripetuto per ogni buco)
 # debug: abbiamo trovato i buchi nelle giunzioni tra le varie partizioni
 # i nuovi indici avranno altri lexicon,index,stats e basta aprirli come per tutti gli altri, appendendo alle liste
+
+missing_docids = find_missing_contents(global_content)
+
+index_name = f"indt_missing_"
+for d in missing_docids:
+    result_id, result_txt = fetch_data_row_from_collection(d)
+    if result_txt != [] and result_id == d:
+        print(type(result_txt))
+        temp_index_element = index_setup(index_name+str(d), index_stem, index_stopw, "no", 3, 0, 0)
+        add_document_to_index(temp_index_element, [0, d, result_txt])
+        close_chunk(temp_index_element)
+        temp_index_element.save_on_disk()
+
+# TODO
+# 
+
+print(global_stats_list)
+for s in global_stats_list:
+    print(s)
 
 print("analyzing: stats files")
 # first step
@@ -61,7 +95,7 @@ if write_stats_file_flag:
 
         # initialize minimum search
         candidate_value = 13553  # a random number, just to initialize the variable
-        candidate_index = -1
+        candidate_index = -1  # partition i
         for i in range(len(global_stats_list)):
             # minimum search: two conditions
             # (1) : no candidates found yet. any candidate with a bigger (=not written) value than last iteration is ok
@@ -148,8 +182,7 @@ while True:
     if len(next_chunk_index) == 0:
         # no minimum found: all lexicons are empty
         break  # job finished
-
-    # minimum found (might have more than one partition with the same token)
+    # else minimum found (might have more than one partition with the same token)
 
     # update the first element of the lexicons of the partitions i've extracted the current elements
     # move the list pointer to the next element
@@ -170,7 +203,7 @@ while True:
         gaps, freqs = line.split()
 
         gap_list = map(int, gaps.split(","))
-        frequencies = freqs.split(",") # keep them as strings, i dont have to make the sums because docids are unique
+        frequencies = freqs.split(",")  # keep them as strings, i dont have to make the sums because docids are unique
 
         # Convert the gaps back to doc IDs
         previous_doc_id = 0
