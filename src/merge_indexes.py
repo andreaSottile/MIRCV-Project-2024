@@ -1,7 +1,8 @@
 import os
 
 from src.config import index_folder_path, collection_separator, posting_separator, element_separator
-from src.modules.InvertedIndex import make_posting_list, index_setup, add_document_to_index, close_chunk
+from src.modules.InvertedIndex import make_posting_list, index_setup, add_document_to_index, close_chunk, \
+    load_from_disk, merge_chunks
 from src.modules.document_processing import fetch_data_row_from_collection
 from src.modules.utils import read_file_to_dict, find_missing_contents
 
@@ -17,7 +18,7 @@ target_folder = "indexes_TRUE-TRUE"
 merge_folder = source_folder + "/" + target_folder
 lexicons_list = []
 indexes_list = []
-write_stats_file_flag = False  # skip a step if it's already done
+write_stats_file_flag = True  # skip a step if it's already done
 compression = "no"
 
 index_stem = ""
@@ -37,7 +38,9 @@ print("opening input files")
 # OPEN all input files
 global_content = []
 for f in os.scandir(merge_folder):
-    if f.name.endswith(".txt"):
+    if not f.name.startswith("index"):
+        continue
+    elif f.name.endswith(".txt"):
         with open(f.path, "rb") as cfg_file:
             content = cfg_file.readlines()
             local_content = content[4].decode("utf-8").strip().split(",")
@@ -54,26 +57,40 @@ for f in os.scandir(merge_folder):
             read_file_to_dict(merge_folder + "/" + f.name + "/stats.txt", separator=collection_separator))
 
 print("checking collection integrity")
-# TODO
-# allarme: mancano alcuni documenti. serve fare lo scan mirato di alcuni documenti
-# soluzione: creare un nuovo indice che contiene un documento mancante (ripetuto per ogni buco)
-# debug: abbiamo trovato i buchi nelle giunzioni tra le varie partizioni
-# i nuovi indici avranno altri lexicon,index,stats e basta aprirli come per tutti gli altri, appendendo alle liste
 
 missing_docids = find_missing_contents(global_content)
 
 index_name = f"indt_missing_"
 for d in missing_docids:
+    temp_index_element = ""
     result_id, result_txt = fetch_data_row_from_collection(d)
-    if result_txt != [] and result_id == d:
-        print(type(result_txt))
-        temp_index_element = index_setup(index_name+str(d), index_stem, index_stopw, "no", 3, 0, 0)
-        add_document_to_index(temp_index_element, [0, d, result_txt])
-        close_chunk(temp_index_element)
-        temp_index_element.save_on_disk()
+    temp_index_name = merge_folder + "/" + index_name + str(d)
+    if result_txt != [] and result_id[0] == d:
+        #Check if the index is already presente we can skip the decompression and load from disk directly
+        if os.path.exists(temp_index_name):
+            temp_index_element = load_from_disk(temp_index_name)
+            if temp_index_element.allow_stop_words != index_stopw or temp_index_element.skip_stemming != index_stem:
+                temp_index_element = ""
+        if temp_index_element == "":
+            #Create new indexes for each missing documents, to guarantee the correct order in the global index
+            temp_index_element = index_setup(index_name + str(d), index_stem, index_stopw, "no", 3, 0, 0)
+            add_document_to_index(temp_index_element, [0, d, result_txt[0]])
+            close_chunk(temp_index_element)
+            # TODO verifica
+            find_chunk_files = lambda directory: [os.path.join(index_folder_path + index_name + str(d), v) for v in
+                                                  os.listdir(index_folder_path + index_name + str(d)) if
+                                                  v.startswith("chunk")]
+            merge_chunks(os.listdir(index_folder_path + index_name + str(d) + "/" + find_chunk_files),
+                         temp_index_element.index_file_path, temp_index_element.lexicon_path)
+            temp_index_element.save_on_disk()
+    else:
+        print("Fetch data row from collection failed")
+        #Merge lexicon, index and stats file with the other ones
+        lexicons_list.append(open(temp_index_element.lexicon_path, "r"))
+        indexes_list.append(open(temp_index_element.index_file_path, "r"))
 
-# TODO
-# 
+    global_stats_list.append(
+        read_file_to_dict(temp_index_element.collection_statistics_path, separator=collection_separator))
 
 print(global_stats_list)
 for s in global_stats_list:
