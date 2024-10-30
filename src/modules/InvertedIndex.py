@@ -408,6 +408,7 @@ def read_posting_string(posting_string):
 def load_from_disk(name):
     # function used to initialise a new invertedIndex by loading it from disk.
     # @ param name: user is required to remember the name of the file on disk
+    # important: name is not the path, it's just the file name
     index = InvertedIndex()
     index.rename(name)
     if index.reload_from_disk():

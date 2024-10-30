@@ -1,6 +1,7 @@
 import os
-
-from src.config import index_folder_path, collection_separator, posting_separator, element_separator
+import time
+from src.config import index_folder_path, collection_separator, element_separator, index_config_path, file_format, \
+    compression_choices_config
 from src.modules.InvertedIndex import make_posting_list, index_setup, add_document_to_index, close_chunk, \
     load_from_disk, merge_chunks
 from src.modules.document_processing import fetch_data_row_from_collection
@@ -9,24 +10,31 @@ from src.modules.utils import read_file_to_dict, find_missing_contents
 '''
 merge two (or more) indexes in one. this program is used to merge portions made with multiprocessing.
 '''
-
+tic = time.perf_counter()
 # path lorenzo
 source_folder = index_folder_path.replace("index", "multiprocessing")
 
 # MANUALLY input the target file
 target_folder = "indexes_TRUE-TRUE"
+
+# MANUALLY choose the compression system
+compression = compression_choices_config[1]
+
+# global variables
+output_lexicon_path = source_folder + "/compression_" + compression_choices_config[
+    1] + "/" + target_folder + "_merged/lexicon.txt"
+output_stats_path = source_folder + "/compression_" + compression_choices_config[
+    1] + "/" + target_folder + "_merged/stats.txt"
+output_index_path = source_folder + "/compression_" + compression_choices_config[
+    1] + "/" + target_folder + "_merged/index.txt"
+
 merge_folder = source_folder + "/" + target_folder
 lexicons_list = []
 indexes_list = []
 write_stats_file_flag = True  # skip a step if it's already done
-compression = "no"
 
-index_stem = ""
-index_stopw = ""
-
-output_lexicon_path = source_folder + "/lexicon.txt"
-output_stats_path = source_folder + "/stats.txt"
-output_index_path = source_folder + "/index.txt"
+index_stem = ""  # initialized as string, replaced with True/False when reading from file
+index_stopw = ""  # initialized as string, replaced with True/False when reading from file
 
 # list of dictionaries (each dict is the content of a stats.txt file)
 global_stats_list = []
@@ -60,41 +68,50 @@ print("checking collection integrity")
 
 missing_docids = find_missing_contents(global_content)
 
-index_name = f"indt_missing_"
+index_name_template = f"indt_missing_"
+if index_stem == True:
+    index_name_template += "skipstem_"
+if index_stopw == True:
+    index_name_template += "allowsw_"
+count = 0
 for d in missing_docids:
     temp_index_element = ""
     result_id, result_txt = fetch_data_row_from_collection(d)
-    temp_index_name = merge_folder + "/" + index_name + str(d)
+
+    # string, name for the temporary index (important: the docid is in the name to avoid confusion
+    temp_index_name = index_name_template + str(d)
+    # path on disk for the temporary index (not deleted by default, but not needed after the execution)
+    temp_index_cfg_path = index_config_path + temp_index_name + file_format
     if result_txt != [] and result_id[0] == d:
-        #Check if the index is already presente we can skip the decompression and load from disk directly
-        if os.path.exists(temp_index_name):
+        # Check if the index is already presente we can skip the decompression and load from disk directly
+        if os.path.exists(temp_index_cfg_path):
+            # load from disk takes the name of the index, so it cannot be used on the temp subfolder
             temp_index_element = load_from_disk(temp_index_name)
             if temp_index_element.allow_stop_words != index_stopw or temp_index_element.skip_stemming != index_stem:
+                # make sure the index found has the same config flags
                 temp_index_element = ""
         if temp_index_element == "":
-            #Create new indexes for each missing documents, to guarantee the correct order in the global index
-            temp_index_element = index_setup(index_name + str(d), index_stem, index_stopw, "no", 3, 0, 0)
+            # Create new indexes for each missing documents, to guarantee the correct order in the global index
+            temp_index_element = index_setup(temp_index_name, index_stem, index_stopw, "no", 3, 0, 0)
             add_document_to_index(temp_index_element, [0, d, result_txt[0]])
             close_chunk(temp_index_element)
-            # TODO verifica
-            find_chunk_files = lambda directory: [os.path.join(index_folder_path + index_name + str(d), v) for v in
-                                                  os.listdir(index_folder_path + index_name + str(d)) if
-                                                  v.startswith("chunk")]
-            merge_chunks(os.listdir(index_folder_path + index_name + str(d) + "/" + find_chunk_files),
-                         temp_index_element.index_file_path, temp_index_element.lexicon_path)
+
+            # this is how the chunk is named from close_chunk
+            chunk_file_path = index_folder_path + temp_index_name + "/chunk_posting_" + str(count) + file_format
+            count += 1  # since i have only one document, it's impossible to have more than one chunk
+
+            merge_chunks([chunk_file_path], temp_index_element.index_file_path, temp_index_element.lexicon_path,
+                         delete_after_merge=False)
             temp_index_element.save_on_disk()
+
+            # add the processed document to the list of files to merge
+            lexicons_list.append(open(temp_index_element.lexicon_path, "r"))
+            indexes_list.append(open(temp_index_element.index_file_path, "r"))
+            global_stats_list.append(
+                read_file_to_dict(temp_index_element.collection_statistics_path, separator=collection_separator))
+
     else:
         print("Fetch data row from collection failed")
-        #Merge lexicon, index and stats file with the other ones
-        lexicons_list.append(open(temp_index_element.lexicon_path, "r"))
-        indexes_list.append(open(temp_index_element.index_file_path, "r"))
-
-    global_stats_list.append(
-        read_file_to_dict(temp_index_element.collection_statistics_path, separator=collection_separator))
-
-print(global_stats_list)
-for s in global_stats_list:
-    print(s)
 
 print("analyzing: stats files")
 # first step
@@ -207,7 +224,7 @@ while True:
         first_element_list[i] = lexicons_list[i].readline()
         if len(first_element_list[i]) == 0:
             first_element_list[i] = "empty"
-            print(f"partition{i} is now empty")
+            print(f"partition {i} is now empty")
 
     # next_chunk_index is the list of which partitions contain that token
     # key_offset_list is the list of offsets to get the posting lists
@@ -247,6 +264,10 @@ while True:
     output_lexicon_file.write(lexicon_line)
     written_lines += 1
 
+    if written_lines % 20000 == 0:
+        print(f"total words in lexicon: {written_lines}")
+
+print(f"total words in lexicon: {written_lines}")
 # end: cleaning the things left open
 for f in lexicons_list:
     f.close()
@@ -256,16 +277,6 @@ for f in indexes_list:
 output_lexicon_file.close()
 output_index_file.close()
 
-'''
-
-print_log("Chunks merge finished for ", 1)
-for file in reader_list:
-    file.close()
-if delete_after_merge:
-    print_log("Deleting chunks after merge", 2)
-    for file_name in file_list:
-        os.remove(file_name)
-index_file.close()
-lexicon_file.close()
-
-'''
+toc = time.perf_counter()
+print("compression method: "+compression)
+print(f"total execution time for merge: {toc - tic} s")
