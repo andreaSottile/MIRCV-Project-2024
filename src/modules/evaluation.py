@@ -1,18 +1,14 @@
 import pandas as pd
-import time
-from src.config import *
-import seaborn as sns
-from src.modules.InvertedIndex import load_from_disk, index_setup
-from src.modules.QueryHandler import QueryHandler
-from src.modules.utils import print_log
-
+import numpy as np
 import matplotlib
+import seaborn as sns
+from src.modules.utils import print_log
+from src.config import *
+
+import matplotlib.pyplot as plt
+from matplotlib.colors import hsv_to_rgb
 
 matplotlib.use('TkAgg')  # issue with pycharm? this is a backend configuration
-import matplotlib.pyplot as plt
-
-import numpy as np
-from matplotlib.colors import hsv_to_rgb
 
 
 def evaluate_on_trec(run_dict, trec_eval):
@@ -25,6 +21,7 @@ def evaluate_on_trec(run_dict, trec_eval):
         score (float): Score of document.
         system (str): Tag for current run.
 
+    :param trec_eval: trec evaluation structure
     :param run_dict: dict on a single retrieval run.
     :return:
     '''
@@ -158,7 +155,8 @@ def plot_metrics_line_charts(data_list):
 
     all_qids = sorted(all_qids)
 
-    # PLOT ISSUE: if query ids are not ordered, figures are weird shapes. to ensure they're not overlapping lines, enforce query ids to be ordered
+    # PLOT ISSUE: if query ids are not ordered, figures are weird shapes.
+    # to ensure they're not overlapping lines, enforce query ids to be ordered
     for name in grouped_data:
         # Extract the 'qid' list and the other lists corresponding to the metrics
         qids = grouped_data[name]['qid']
@@ -251,44 +249,10 @@ def read_query_file(file_pointer):
     return query_id, query_string
 
 
-def prepare_index(args, size_limit):
-    # name building: makes clear which indexing flag is used, to avoid repeating indexing with the same flags
-    name = "_" + str(args[0]) + "_"
-    if args[6] == "no":
-        name += "uncompressed_"
-    else:
-        name += args[6] + "_"
-    if args[5]:
-        name += "stopwords_"
-    if args[4]:
-        name += "no_stemming"
-    else:
-        name += "w_stemming"
-
-    tic = time.perf_counter()
-    test_index_element = load_from_disk(name)
-
-    if test_index_element is None:
-        test_index_element = index_setup(name, stemming_flag=args[4], stop_words_flag=args[5],
-                                         compression_flag=args[6],
-                                         k=args[3], join_algorithm=args[1], scoring_f=args[2])
-    else:
-        test_index_element.algorithm = args[1]
-        test_index_element.scoring = args[2]
-        test_index_element.topk = args[3]
-    if test_index_element.is_ready():
-        # check a random line (size_limit/2 is a line in the middle of the index)
-        if not test_index_element.content_check(int(size_limit / 2)):
-            # if there is no content, start the dataset scan
-            test_index_element.scan_dataset(size_limit, delete_after_compression=True)
-    else:
-        # if not ready, it's not been initialized correctly
-        print_log("CRITICAL Error during index setup", 0)
-        return None
-
-    toc = time.perf_counter()
-    print_log("===========================================================", 0)
-    print_log("Time for preparing the index: ", 0)
-    print_log(str(toc - tic), 0)
-    print_log("===========================================================", 0)
-    return QueryHandler(test_index_element)
+def make_name(query_handler, search_algorithm):
+    name = query_handler.index.name
+    name += " " + query_handler.index.scoring
+    name += " " + str(query_handler.index.topk)
+    name += " " + query_handler.index.algorithm  # conjunctive or disjunctive
+    name += " " + search_algorithm  # ternary or skipping
+    return name

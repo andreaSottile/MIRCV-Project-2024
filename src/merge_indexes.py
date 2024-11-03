@@ -15,18 +15,15 @@ tic = time.perf_counter()
 source_folder = index_folder_path.replace("index", "multiprocessing")
 
 # MANUALLY input the target file
-target_folder = "indexes_TRUE-TRUE"
+target_folder = "indexes_FALSE-TRUE"
 
 # MANUALLY choose the compression system
-compression = compression_choices_config[1]
+compression = compression_choices_config[0]
 
 # global variables
-output_lexicon_path = source_folder + "/compression_" + compression_choices_config[
-    1] + "/" + target_folder + "_merged/lexicon.txt"
-output_stats_path = source_folder + "/compression_" + compression_choices_config[
-    1] + "/" + target_folder + "_merged/stats.txt"
-output_index_path = source_folder + "/compression_" + compression_choices_config[
-    1] + "/" + target_folder + "_merged/index.txt"
+output_lexicon_path = source_folder + "/compression_" + compression + "/" + target_folder + "_merged/lexicon.txt"
+output_stats_path = source_folder + "/compression_" + compression + "/" + target_folder + "_merged/stats.txt"
+output_index_path = source_folder + "/compression_" + compression + "/" + target_folder + "_merged/index.txt"
 
 merge_folder = source_folder + "/" + target_folder
 lexicons_list = []
@@ -139,7 +136,7 @@ if write_stats_file_flag:
                 candidate_value = int(global_stats_list[i]["0"][0])
                 candidate_index = i
                 finished = False
-        print(candidate_value)
+        print("Found: partition starting from docid " + str(candidate_value))
         # if there is no value greater than the last_written_value, it's finished
         if not finished:
             last_written_value = candidate_value
@@ -278,5 +275,5 @@ output_lexicon_file.close()
 output_index_file.close()
 
 toc = time.perf_counter()
-print("compression method: "+compression)
+print("compression method: " + compression)
 print(f"total execution time for merge: {toc - tic} s")
