@@ -140,7 +140,7 @@ class QueryHandler:
         last_docid_read = np.nan
         with open(self.index.collection_statistics_path, "r+") as doc_stats_file:
             for docid in keys:
-                if docid == last_docid_read + 1:
+                if (last_docid_read != np.nan) and (docid == int(last_docid_read) + 1):
                     # consecutive read: skip the search phase
                     checkpoint, line = next_GEQ_line(doc_stats_file, checkpoint + 1)
                     # line is a string like "docid,docno,doc_size"
