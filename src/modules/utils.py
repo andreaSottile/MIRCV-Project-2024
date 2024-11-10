@@ -64,7 +64,7 @@ def set_search_interval(file_pointer, start, key, key_delimiter, step_size, id_i
     # divide the file in chunks, and look for the correct one where to look for the key-word
     # @ param file_pointer : file where to look for
     # @ param start : position (byte number) where to start the search
-    # @ param key : word to look for
+    # @ param key : word to look for (warning: int or str)
     # @ param key_delimiter : char separating the key-word from the rest of the line
     # @ returns : low,high as positions in the file
     low = start
@@ -126,12 +126,22 @@ def next_GEQ_line(file_pointer, position):
     return line_start, line
 
 
-def ternary_search(file_pointer, start_position, target_key, delimiter, end_position, last_key, last_row):
+def enforce_key_type(value, key_type):
+    if key_type == "int":
+        if value == '':
+            return 0
+        return int(value)
+    else:
+        return str(value)
+
+
+def ternary_search(file_pointer, start_position, target_key, delimiter, end_position, last_key, last_row,
+                   key_type="int"):
     '''
       search the key-word in a file, using a 3-nary search
      @ param file_pointer : file where to look for the word
      @ param start_position : start of the search interval at iteration 0
-     @ param target_key : token/string to look for
+     @ param target_key : token/string to look for (important: could be string or int)
      @ param delimiter : char separating the key-word from the rest of the line
      @ end_position : last character of the file
      @ last_Key : key of the last line of the file
@@ -142,13 +152,16 @@ def ternary_search(file_pointer, start_position, target_key, delimiter, end_posi
     #  low   <  checkpoint_1  <  checkpoint_2 < high
     low_pos, low_row = next_GEQ_line(file_pointer, start_position)
     low_key = get_row_id(low_row, delimiter)
-    print_log("first and last rows", 5)
+    print_log("first and last rows", 7)
     high_pos, high_row = end_position, last_row
     high_key = last_key
 
-    print_log(low_row, 5)
-    print_log(high_row, 5)
-    print_log("ternary search started for word \'" + str(target_key) + "\'", 4)
+    print_log(low_row, 7)
+    print_log(high_row, 7)
+    print_log("ternary search started for word \'" + str(target_key) + "\'", 6)
+
+    high_key = enforce_key_type(high_key, key_type)
+    low_key = enforce_key_type(low_key, key_type)
     # check the extremes
     if target_key == low_key:
         return low_pos, low_row
@@ -160,7 +173,7 @@ def ternary_search(file_pointer, start_position, target_key, delimiter, end_posi
     previous_high = previous_low = -1
     while True:
         # safety check: key is out of boundaries
-        if low_key > target_key:
+        if not (low_key < target_key < high_key):
             break
 
         # make the 3 intervals working with the position in the file
@@ -168,15 +181,17 @@ def ternary_search(file_pointer, start_position, target_key, delimiter, end_posi
         cut1 = low_pos + (high_pos - low_pos) // 3  # flooring division
 
         pivot_1_pos, pivot_1_row = next_GEQ_line(file_pointer, cut1)
-        pivot_1_key = get_row_id(pivot_1_row, delimiter)
+        pivot_1_key = enforce_key_type(get_row_id(pivot_1_row, delimiter), key_type)
         # check lower border
         while low_key >= pivot_1_key:
             print_log("gap too low, repositioning pivot 1", 5)
             # enforce keys are different and ordered
             pivot_1_pos += 1
             pivot_1_pos, pivot_1_row = next_GEQ_line(file_pointer, pivot_1_pos)
-            pivot_1_key = get_row_id(pivot_1_row, delimiter)
-
+            pivot_1_key = enforce_key_type(get_row_id(pivot_1_row, delimiter), key_type)
+            if pivot_1_key >= target_key:
+                # lucky! key is near the pivot1
+                break
         # check lower interval content (lower border has already been checked)
         if low_key < target_key <= pivot_1_key:
             print_log("lower interval is the correct one", 5)
@@ -191,7 +206,7 @@ def ternary_search(file_pointer, start_position, target_key, delimiter, end_posi
                     # avoid infinite loop if the term is not present
                     break
                 pivot_1_pos, pivot_1_row = next_GEQ_line(file_pointer, low_pos)
-                pivot_1_key = get_row_id(pivot_1_row, delimiter)
+                pivot_1_key = enforce_key_type(get_row_id(pivot_1_row, delimiter), key_type)
                 first_time += 1
             else:
                 previous_high = pivot_1_pos
@@ -206,7 +221,7 @@ def ternary_search(file_pointer, start_position, target_key, delimiter, end_posi
         cut2 = pivot_1_pos + (high_pos - pivot_1_pos) // 2  # flooring division
 
         pivot_2_pos, pivot_2_row = next_GEQ_line(file_pointer, cut2)
-        pivot_2_key = get_row_id(pivot_2_row, delimiter)
+        pivot_2_key = enforce_key_type(get_row_id(pivot_2_row, delimiter), key_type)
 
         # check middle border
         while pivot_1_key >= pivot_2_key:
@@ -216,8 +231,10 @@ def ternary_search(file_pointer, start_position, target_key, delimiter, end_posi
                 pivot_2_pos = pivot_1_pos
             pivot_2_pos += 1
             pivot_2_pos, pivot_2_row = next_GEQ_line(file_pointer, pivot_2_pos)
-            pivot_2_key = get_row_id(pivot_2_row, delimiter)
-
+            pivot_2_key = enforce_key_type(get_row_id(pivot_2_row, delimiter), key_type)
+            if pivot_2_key >= target_key:
+                # lucky! key is near pivot2
+                break
         # check middle interval content (lower border has already been checked)
         if pivot_1_key < target_key <= pivot_2_key:
             print_log("middle interval is the correct one", 5)
@@ -231,7 +248,7 @@ def ternary_search(file_pointer, start_position, target_key, delimiter, end_posi
                     # avoid infinite loop if the term is not present
                     break
                 pivot_2_pos, pivot_2_row = next_GEQ_line(file_pointer, pivot_1_pos)
-                pivot_2_key = get_row_id(pivot_2_row, delimiter)
+                pivot_2_key = enforce_key_type(get_row_id(pivot_2_row, delimiter), key_type)
                 first_time += 1
 
             else:
@@ -298,8 +315,8 @@ def find_missing_contents(ranges):
     # Order and merge the intervals
     merged_ranges = merge_ranges(ranges)
 
-    # Find the maximum number between all intervals
-    max_value = max(r[1] for r in merged_ranges)
+    # documents in the collection
+    max_value = 8841822 # last docid
 
     missing_numbers = []
     current = 0
@@ -332,3 +349,8 @@ def merge_ranges(ranges):
             merged.append(current)
 
     return merged
+
+
+def export_dict_to_file(score, score_count):
+    print(score)
+    pass

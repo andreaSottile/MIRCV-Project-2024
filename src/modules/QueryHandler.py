@@ -13,9 +13,8 @@ you should implement a dynamic pruning algorithm.
 '''
 import math
 
-import numpy as np
-
 from src.config import *
+from src.modules.cache import cache_hit_or_miss, cache_get_posting_list, cache_push
 from src.modules.compression import decode_posting_list
 from src.modules.PostingList import PostingList
 from src.modules.preprocessing import preprocess_text
@@ -52,6 +51,7 @@ class QueryHandler:
         self.doc_ids = 0  # read from stats.txt
         self.num_docs = index_file.num_doc
         self.doc_len_average = self.compute_docs_average(index_file.num_doc)  # len (stats.txt)
+        self.doc_stats_cache = {}
 
     def prepare_query(self, query_raw):
         # takes a query (string, in natural language) and apply the same preprocessing steps applied to the dataset
@@ -74,17 +74,28 @@ class QueryHandler:
     def query(self, query_string, search_file_algorithms):
         # executes a whole query, starting from natural language and outputting the top k results
         print_log("received query", 3)
+        # preprocessing for the query string
         query_terms = self.prepare_query(query_string)
         print_log("reading each posting lists for: ", 3)
-        print_log(query_terms, 4)
+        print_log(query_terms, 3)
+
+        # access the lexicon, then the index
         raw_posting_lists = self.fetch_posting_lists(query_terms, search_file_algorithms)
         # raw_posting_lists is a list of strings, where each string is a
         print_log("converting post list to dictionaries", 3)
+
+        # conjunction/disjunction
         posting_lists = make_posting_candidates(query_terms, raw_posting_lists)
         print_log("calculating relevance with algorithm: " + self.index.algorithm, 4)
         related_documents = self.detect_related_documents(posting_lists)
+
+        # calculating scoring functions for all related documents
         print_log("calculating scores for related documents", 3)
         scores = self.compute_scoring_function(posting_lists, related_documents, search_file_algorithms)
+
+        # cache usage: memory holds stats.txt to optimize hdd usage (saves time)
+        if flush_doc_size_cache_after_query:
+            self.doc_stats_cache = {}
         return get_top_k(self.index.topk, scores)
 
     def fetch_posting_lists(self, query_terms, search_algorithm):
@@ -115,21 +126,35 @@ class QueryHandler:
             index_file = open(self.index.index_file_path, "r+")
         with open(self.index.lexicon_path, 'r+') as f:
             for token in query_terms:  # for each token...
-                # search in lexicon for the offsets (start and finish in the inv.index file)
-                res_offset_interval, doc_freq = search_in_lexicon(f, token, search_algorithm)
-                if doc_freq == -1:
-                    # token not found in lexicon
-                    res.append("")
-                else:
-                    # fetch the posting list from inv. index file
-                    res_posting_string = search_in_index(index_file, res_offset_interval, self.index.compression)
-                    # store the posting list for each word
+
+                # cache usage: evaluation is a lot shorter avoiding reading the same things multiple times
+                cache_hit = cache_hit_or_miss(self.index.lexicon_path, token)
+
+                if cache_hit == -1:  # cache missed: search it on hdd
+                    # search in lexicon for the offsets (start and finish in the inv.index file)
+                    res_offset_interval, doc_freq = search_in_lexicon(f, token, search_algorithm)
+                    if doc_freq == -1:
+                        # token not found in lexicon
+                        res.append("")
+                    else:
+                        # fetch the posting list from inv. index file
+                        res_posting_string = search_in_index(index_file, res_offset_interval, self.index.compression)
+                        # store the posting list for each word
+                        res.append(res_posting_string)
+
+                        # cache update: add the new element
+                        cache_push(self.index.lexicon_path, token, doc_freq, res_posting_string)
+
+                else:  # cache hit
+                    res_posting_string = cache_get_posting_list(self.index.lexicon_path, token)
                     res.append(res_posting_string)
+        # we stored the docfreq but it's not returned because it's not used really frequently
+        #   and it's easier to use len(posting_list)
         return res
 
     def fetch_documents_size(self, keys, search_file_algorithms):
         # get the document size for each docids
-        # @ param keys : list of docids
+        # @ param keys : list of docids (as strings)
         # @ param search_file_algorithms : algorithm to perform search in the documents statistics file
         # @ return : dictionary of {docids : size}
 
@@ -137,20 +162,36 @@ class QueryHandler:
         #    docid + collection_separator + docno + collection_separator + size + chunk_line_separator
         checkpoint = 0
         results = {}
-        last_docid_read = np.nan
+        last_docid_read = -1
+        jobs_counter = 0
         with open(self.index.collection_statistics_path, "r+") as doc_stats_file:
             for docid in keys:
-                if (last_docid_read != np.nan) and (docid == int(last_docid_read) + 1):
+                jobs_counter += 1
+                if jobs_counter % 20000 == 0:
+                    print_log(f"document sizes left to fetch: {len(keys) - jobs_counter}")
+                size = 0
+                if docid in self.doc_stats_cache.keys():
+                    # cache usage: if the document has already been retrieved, it's in memory already
+                    results[docid] = self.doc_stats_cache[docid]
+                elif (last_docid_read != -1) and (int(docid) == last_docid_read + 1):
                     # consecutive read: skip the search phase
                     checkpoint, line = next_GEQ_line(doc_stats_file, checkpoint + 1)
                     # line is a string like "docid,docno,doc_size"
-                    size = line.split(",")[2].strip()
+                    content = line.strip().split(",")
+                    if len(content) == 3:
+                        size = content[2].strip()
+                    else:
+                        print_log("reading empty line in stats.txt", 3)
                 else:
-                    size, checkpoint = search_in_doc_stats_file(doc_stats_file, docid, search_file_algorithms,
+                    size, checkpoint = search_in_doc_stats_file(doc_stats_file, int(docid), search_file_algorithms,
                                                                 checkpoint)
-                last_docid_read = docid
-                results[docid] = int(size)
 
+                if int(size) > 0:
+                    last_docid_read = int(docid)
+                    results[docid] = int(size)
+                    if allow_doc_size_caching:
+                        # cache is used when a docid is asked more than once
+                        self.doc_stats_cache[docid] = size
         return results
 
     def detect_related_documents(self, posting_lists):
@@ -161,8 +202,8 @@ class QueryHandler:
             return []
         # initialize the candidates with the keys of the first posting list
         candidates = set(posting_lists[next(iter(posting_lists))].docids)
-        print_log("first set of candidates", 4)
-        print_log(candidates, 4)
+        print_log(f"first set of candidates: {len(candidates)} elements", 4)
+        print_log(candidates, 5)
         for term in posting_lists:  # the first one could be skipped, since it's a copy
             if self.index.algorithm == "conjunctive":
                 # intersection
@@ -179,8 +220,8 @@ class QueryHandler:
                 print_log("CRITICAL ERROR: query algorithm not set", 0)
                 return []
         # returns a list of related docids
-        print_log("related documents ID list", 4)
-        print_log(candidates, 4)
+        print_log(f"related documents: {len(candidates)}", 4)
+
         return sorted(list(candidates), key=lambda x: int(x))
 
     def compute_scoring_function(self, posting_lists, related_documents, search_file_algorithms):
@@ -194,6 +235,9 @@ class QueryHandler:
         doc_size = {}
         if self.index.scoring in ["BM11", "BM25"]:
             doc_size = self.fetch_documents_size(related_documents, search_file_algorithms)
+            # WARNING : we know this might load in memory millions of numbers
+            # it's cheaper for our hardware to use the memory than accessing the disk at each number required
+            # worst case: load the whole stats.txt file (180mb)
 
         for token_key, postingListObj in posting_lists.items():
             # log ( N of docs in the collection / N of relevant docs )
@@ -203,6 +247,11 @@ class QueryHandler:
 
                 # read posting list, extract doc_ids from posting list
                 for i in range(len(postingListObj.docids)):
+
+                    # WARNING: we know that sometimes this is going to loop through millions of scoring functions
+                    # it's cheaper for our hardware to store the numbers as a very long list than keeping only the top k
+                    # because of the comparison/ordering time
+
                     if postingListObj.docids[i] not in related_documents:
                         # check if document is flagged as related (at least one occurrence of token_key)
                         scores[postingListObj.docids[i]] = 0
@@ -229,6 +278,8 @@ class QueryHandler:
                     else:
                         # new relevant document, initialize its score
                         scores[postingListObj.docids[i]] = w_t_d
+        print_log("scores for related documents:", 3)
+        print_log(scores, 3)
         return scores
 
 
@@ -271,18 +322,20 @@ def search_in_lexicon(lexicon, token, search_algorithm):
     line = ""
     if search_algorithm == "ternary":
         last_line_pos, last_line = get_last_line(lexicon)
-        line_pos, line = ternary_search(lexicon, start_position=last_read_position, target_key=token,
+        # important: lexicon is in lexicographic order (token must be cast to string)
+        line_pos, line = ternary_search(lexicon, start_position=last_read_position, target_key=str(token),
                                         delimiter=element_separator, end_position=last_line_pos,
-                                        last_key=get_row_id(last_line, element_separator), last_row=last_line)
+                                        last_key=get_row_id(last_line, element_separator), last_row=last_line,
+                                        key_type="str")
     elif search_algorithm == "skipping":
         step = search_chunk_size_config
         line_pos, high, line = set_search_interval(lexicon, last_read_position, token, element_separator,
-                                                   step_size=step)
+                                                   step_size=step, id_is_a_String=True)
         # skipping big chunks when reading lots of files, small chunks when search interval is smaller
         while step >= 1:
             step = step // 10
             line_pos, high, line = set_search_interval(lexicon, line_pos, token, element_separator,
-                                                       step_size=step)
+                                                       step_size=step, id_is_a_String=True)
             if token == get_row_id(line, element_separator):
                 line_pos = high
                 break
@@ -324,7 +377,7 @@ def search_in_doc_stats_file(doc_stats_file, docid, search_algorithm, last_check
     :param docid: docid to look for
     :param search_algorithm: user can choose any one search algorithm implemented
     :param last_checkpoint: skip some content at the beginning of the file if i know it doesnt contain the docid
-    :return: size of the document
+    :return: size of the document, position of the cursor in the document
     '''
 
     results = []
@@ -334,9 +387,11 @@ def search_in_doc_stats_file(doc_stats_file, docid, search_algorithm, last_check
 
     if search_algorithm == "ternary":
         last_line_pos, last_line = get_last_line(doc_stats_file)
-        line_pos, line = ternary_search(doc_stats_file, start_position=last_read_position, target_key=docid,
+        # important: stats is in cardinal order (token must be cast to integer)
+        line_pos, line = ternary_search(doc_stats_file, start_position=last_read_position, target_key=int(docid),
                                         delimiter=collection_separator, end_position=last_line_pos,
-                                        last_key=get_row_id(last_line, collection_separator), last_row=last_line)
+                                        last_key=get_row_id(last_line, collection_separator), last_row=last_line,
+                                        key_type="int")
     elif search_algorithm == "skipping":
         step = search_chunk_size_config
         line_pos, high, line = set_search_interval(doc_stats_file, last_read_position, docid, collection_separator,
@@ -364,12 +419,12 @@ def search_in_doc_stats_file(doc_stats_file, docid, search_algorithm, last_check
             last_read_position = line_pos
     else:
         print_log("Critical error: cannot search without a search algorithm", 0)
-        return 0
+        return 0, last_checkpoint
 
     # search failed: return a blank
     if line_pos == -1:
         print_log("Cannot find " + str(docid) + " in doc stats file", 2)
-        return 0
+        return 0, last_checkpoint
 
     # search success: return offset and docfreq
 
@@ -430,6 +485,8 @@ def weight_bm25(idf, term_freq, avg, doc_len):
     # @ param avg : average of the length of all the documents in the collection
     if term_freq == 0:
         return 0
+    if doc_len == 0:
+        return 0  # this should not happen (trying to score a document not present)
     return idf * term_freq / (term_freq + BM_k_one * (1 - BM25_b + BM25_b * (doc_len / avg)))
 
 
@@ -442,4 +499,6 @@ def weight_bm11(idf, term_freq, avg, doc_len):
     # calculated like BM25 with BM25_b = 1
     if term_freq == 0:
         return 0
+    if doc_len == 0:
+        return 0  # this should not happen (trying to score a document not present)
     return idf * term_freq / (term_freq + BM_k_one * (doc_len / avg))
