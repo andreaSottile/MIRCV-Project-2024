@@ -29,6 +29,7 @@ def cache_hit_or_miss(target_path, target_key):
     # check if the element is cached or not (returns -1 or position in cache)
     cache_check(target_path)
     if not lexicon_cache[target_path]:
+        #if I enter here it means that lexicon_cache[target_path] is empty so we have to insert the first cache entry
         print_log(f"cache miss for {target_key} - first cache entry", 2)
         return -1  # miss: cache empty
     else:
@@ -38,7 +39,7 @@ def cache_hit_or_miss(target_path, target_key):
             if target_key == line_dict["token_key"]:
                 print_log(f"cache hit for {target_key}", 2)
                 return lexicon_cache[target_path].index(line_dict)  # hit (return cache position)
-    print_log(f"cache hit for {target_key}", 2)
+    print_log(f"cache miss for {target_key}", 2)
     return -1  # miss: not found
 
 
@@ -84,14 +85,11 @@ def cache_pop(target_path):
 def cache_push(target_path, target_key, target_docfreq, target_posting_list):
     global lexicon_cache, cache_count
     # adds an element to the cache
-    cache_check(target_path)
-    pos = cache_hit_or_miss(target_path, target_key)
-    if pos == -1:
-        # element not present
-        new_element = {"token_key": target_key, "token_docfreq": target_docfreq, "token_posting": target_posting_list}
-        lexicon_cache[target_path].append(new_element)
+    # WARNING: this function is called only in the case that there is a miss
+    # so we are sure that we have to only add the new element
+    new_element = {"token_key": target_key, "token_docfreq": target_docfreq, "token_posting": target_posting_list}
+    lexicon_cache[target_path].append(new_element)
 
-        if cache_count[target_path] > lexicon_cache_size:
-            # cache full
-            cache_pop(target_path)
-    # else: element already present, nothing to do
+    if cache_count[target_path] > lexicon_cache_size:
+        # cache full
+        cache_pop(target_path)

@@ -19,6 +19,8 @@ from src.modules.compression import decode_posting_list
 from src.modules.PostingList import PostingList
 from src.modules.preprocessing import preprocess_text
 from src.modules.utils import get_last_line, ternary_search, get_row_id, print_log, set_search_interval, next_GEQ_line
+import time
+
 
 
 def get_top_k(k, results):
@@ -75,24 +77,42 @@ class QueryHandler:
         # executes a whole query, starting from natural language and outputting the top k results
         print_log("received query", 3)
         # preprocessing for the query string
+        tic = time.perf_counter()
         query_terms = self.prepare_query(query_string)
         print_log("reading each posting lists for: ", 3)
         print_log(query_terms, 3)
+        toc = time.perf_counter()
+        print("prepare_query created in " + str(toc - tic))
 
         # access the lexicon, then the index
+        tic = time.perf_counter()
         raw_posting_lists = self.fetch_posting_lists(query_terms, search_file_algorithms)
         # raw_posting_lists is a list of strings, where each string is a
         print_log("converting post list to dictionaries", 3)
+        toc = time.perf_counter()
+        print("fetch_raw_posting_list created in " + str(toc - tic))
+
 
         # conjunction/disjunction
+        tic = time.perf_counter()
+
         posting_lists = make_posting_candidates(query_terms, raw_posting_lists)
+        toc = time.perf_counter()
+        print(" make posting candidates created in " + str(toc - tic))
         print_log("calculating relevance with algorithm: " + self.index.algorithm, 4)
+        tic = time.perf_counter()
+
         related_documents = self.detect_related_documents(posting_lists)
+        toc = time.perf_counter()
+        print("detect related document, created in " + str(toc - tic))
 
         # calculating scoring functions for all related documents
         print_log("calculating scores for related documents", 3)
-        scores = self.compute_scoring_function(posting_lists, related_documents, search_file_algorithms)
+        tic = time.perf_counter()
 
+        scores = self.compute_scoring_function(posting_lists, related_documents, search_file_algorithms)
+        toc = time.perf_counter()
+        print("compute scoring created in " + str(toc - tic))
         # cache usage: memory holds stats.txt to optimize hdd usage (saves time)
         if flush_doc_size_cache_after_query:
             self.doc_stats_cache = {}
@@ -146,10 +166,10 @@ class QueryHandler:
                         cache_push(self.index.lexicon_path, token, doc_freq, res_posting_string)
 
                 else:  # cache hit
-                    res_posting_string = cache_get_posting_list(self.index.lexicon_path, token)
+                    res_posting_string = cache_get_posting_list(self.index.lexicon_path, cache_hit)
                     res.append(res_posting_string)
         # we stored the docfreq but it's not returned because it's not used really frequently
-        #   and it's easier to use len(posting_list)
+        # and it's easier to use len(posting_list)
         return res
 
     def fetch_documents_size(self, keys, search_file_algorithms):
@@ -234,20 +254,31 @@ class QueryHandler:
         # fetch doc size if necessary
         doc_size = {}
         if self.index.scoring in ["BM11", "BM25"]:
+            tic = time.perf_counter()
+
             doc_size = self.fetch_documents_size(related_documents, search_file_algorithms)
+            toc = time.perf_counter()
+            print("fetch document size in scoring created in " + str(toc - tic))
             # WARNING : we know this might load in memory millions of numbers
             # it's cheaper for our hardware to use the memory than accessing the disk at each number required
             # worst case: load the whole stats.txt file (180mb)
+        tic = time.perf_counter()
 
         for token_key, postingListObj in posting_lists.items():
             # log ( N of docs in the collection / N of relevant docs )
+
             if postingListObj.size > 0:
                 idf = math.log(self.num_docs / len(postingListObj.docids))
                 print_log("calculated IDF : " + str(idf), 4)
-
+                tic1 = time.perf_counter()
+                index_for_tic1=0
                 # read posting list, extract doc_ids from posting list
                 for i in range(len(postingListObj.docids)):
-
+                    index_for_tic1+=1
+                    if index_for_tic1 % 10000 == 0:
+                        toc1 = time.perf_counter()
+                        print("1000 doc scored in " + str(toc1 - tic1))
+                        tic1 = time.perf_counter()
                     # WARNING: we know that sometimes this is going to loop through millions of scoring functions
                     # it's cheaper for our hardware to store the numbers as a very long list than keeping only the top k
                     # because of the comparison/ordering time
@@ -278,6 +309,9 @@ class QueryHandler:
                     else:
                         # new relevant document, initialize its score
                         scores[postingListObj.docids[i]] = w_t_d
+            toc = time.perf_counter()
+            print("token scored in " + str(toc - tic))
+            tic = time.perf_counter()
         print_log("scores for related documents:", 3)
         print_log(scores, 3)
         return scores

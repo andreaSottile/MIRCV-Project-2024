@@ -35,24 +35,28 @@ for compression in compression_sets:
             if os.path.exists(index_config_path + local_name + file_format):
 
                 base_index = load_from_disk(local_name)
-
-                for query_algorithm in query_processing_algorithm_config:
-                    for scoring_function in scoring_function_config:
-                        for topk in k_returned_results_config:
-                            # avoid sharing the same index
-                            index = copy.deepcopy(base_index)
-                            # assign the required parameter configurations
-                            index.topk = topk  # options required by the specs
-                            index.scoring = scoring_function  # tfidf, bm11, etc...
-                            index.algorithm = query_algorithm  # conjunctive/disjunctive
-                            # prepare a query handler
-                            query_hanlder = QueryHandler(index)
-                            query_handlers_catalogue.append(query_hanlder)
-                            if index_limit > 0:
-                                index_limit -= 1
-                                print_log(f"loaded {len(query_handlers_catalogue)} indexes", 1)
-                            else:
-                                break  # test purposes: reduce the number of indexes to evaluate
+                query_algorithm="conjunctive"
+                scoring_function="TFIDF"
+                topk=20
+                #for query_algorithm in query_processing_algorithm_config:
+                #for scoring_function in scoring_function_config:
+                #for topk in k_returned_results_config:
+                #TAB START
+                # avoid sharing the same index
+                index = copy.deepcopy(base_index)
+                # assign the required parameter configurations
+                index.topk = topk  # options required by the specs
+                index.scoring = scoring_function  # tfidf, bm11, etc...
+                index.algorithm = query_algorithm  # conjunctive/disjunctive
+                # prepare a query handler
+                query_handler = QueryHandler(index)
+                query_handlers_catalogue.append(query_handler)
+                if index_limit > 0:
+                    index_limit -= 1
+                    print_log(f"loaded {len(query_handlers_catalogue)} indexes", 1)
+                else:
+                    break  # test purposes: reduce the number of indexes to evaluate
+                #TAB END
             else:
                 print_log("missing index to evaluate: " + str(local_name), 0)
 toc = time.perf_counter()
@@ -78,8 +82,8 @@ while True:
         for handler in query_handlers_catalogue:
             print_log(f"running query on index {index_count}", 2)
             index_count += 1
-            if index_count < 7:
-                continue
+            #if index_count < 7:
+            #    continue
             for algorithm in search_into_file_algorithms:
                 tic = time.perf_counter()
                 result = handler.query(next_query, algorithm)
