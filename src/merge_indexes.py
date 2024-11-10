@@ -17,8 +17,13 @@ source_folder = index_folder_path.replace("index", "multiprocessing")
 # MANUALLY input the target file
 target_folder = "indexes_FALSE-TRUE"
 
+# false false : do stemming, remove stopwords
+# false true : do stemming, keep stopwords
+# true false : skip stemming, remove stopwords
+# true true : skip stemming, keep stopwords
+
 # MANUALLY choose the compression system
-compression = compression_choices_config[0]
+compression = compression_choices_config[2]
 
 # global variables
 output_lexicon_path = source_folder + "/compression_" + compression + "/" + target_folder + "_merged/lexicon.txt"
@@ -73,21 +78,23 @@ if index_stopw == True:
 count = 0
 for d in missing_docids:
     temp_index_element = ""
-    result_id, result_txt = fetch_data_row_from_collection(d)
 
     # string, name for the temporary index (important: the docid is in the name to avoid confusion
     temp_index_name = index_name_template + str(d)
     # path on disk for the temporary index (not deleted by default, but not needed after the execution)
     temp_index_cfg_path = index_config_path + temp_index_name + file_format
-    if result_txt != [] and result_id[0] == d:
-        # Check if the index is already presente we can skip the decompression and load from disk directly
-        if os.path.exists(temp_index_cfg_path):
-            # load from disk takes the name of the index, so it cannot be used on the temp subfolder
-            temp_index_element = load_from_disk(temp_index_name)
-            if temp_index_element.allow_stop_words != index_stopw or temp_index_element.skip_stemming != index_stem:
-                # make sure the index found has the same config flags
-                temp_index_element = ""
-        if temp_index_element == "":
+
+    # Check if the index is already presente we can skip the decompression and load from disk directly
+    if os.path.exists(temp_index_cfg_path):
+        # load from disk takes the name of the index, so it cannot be used on the temp subfolder
+        temp_index_element = load_from_disk(temp_index_name)
+        if temp_index_element.allow_stop_words != index_stopw or temp_index_element.skip_stemming != index_stem:
+            # make sure the index found has the same config flags
+            temp_index_element = ""
+    if temp_index_element == "":
+        result_id, result_txt = fetch_data_row_from_collection(d)
+        # check if the document really exists
+        if result_txt != [] and result_id[0] == d:
             # Create new indexes for each missing documents, to guarantee the correct order in the global index
             temp_index_element = index_setup(temp_index_name, index_stem, index_stopw, "no", 3, 0, 0)
             add_document_to_index(temp_index_element, [0, d, result_txt[0]])
@@ -101,14 +108,16 @@ for d in missing_docids:
                          delete_after_merge=False)
             temp_index_element.save_on_disk()
 
-            # add the processed document to the list of files to merge
-            lexicons_list.append(open(temp_index_element.lexicon_path, "r"))
-            indexes_list.append(open(temp_index_element.index_file_path, "r"))
-            global_stats_list.append(
-                read_file_to_dict(temp_index_element.collection_statistics_path, separator=collection_separator))
+        else:
+            print("Fetch data row from collection failed")
 
-    else:
-        print("Fetch data row from collection failed")
+    # add the processed document to the list of files to merge
+    lexicons_list.append(open(temp_index_element.lexicon_path, "r"))
+    indexes_list.append(open(temp_index_element.index_file_path, "r"))
+    global_stats_list.append(
+        read_file_to_dict(temp_index_element.collection_statistics_path, separator=collection_separator))
+
+
 
 print("analyzing: stats files")
 # first step
@@ -118,7 +127,7 @@ if write_stats_file_flag:
     written_lines = 0
     last_written_value = -1  # initialize with a low number, lesser than any possible docid
     finished = False
-    output_stats_file = open(output_stats_path, "w")
+    output_stats_file = open(output_stats_path, "w+")
     while not finished:  # iterate once for every object in the global_stats_list
         finished = True  # termination condition
 
