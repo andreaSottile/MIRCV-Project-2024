@@ -11,7 +11,7 @@ from colorama import Fore
 
 # Global variables (defaults)
 from src.config import query_processing_algorithm_config, scoring_function_config, index_config_path, file_format, \
-    search_into_file_algorithms, index_name
+    search_into_file_algorithms, default_index_title
 from src.modules.InvertedIndex import load_from_disk, index_setup
 from src.modules.QueryHandler import QueryHandler
 
@@ -26,7 +26,7 @@ allow_stop_words = True
 index_restart_needed = True
 first_step = 0
 search_algorithm = "ternary"
-
+index_title = default_index_title
 
 def get_parameter(parameter_name):
     if parameter_name == "file_count":
@@ -48,7 +48,7 @@ def get_parameter(parameter_name):
 
 
 def get_index_title():
-    return str(index_name)
+    return str(index_title)
 
 
 def flag_restart_needed():
