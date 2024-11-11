@@ -1,5 +1,7 @@
 import os
 import ast
+import re
+
 
 from src.config import verbosity_config, output_query_trec_evaluation_file
 
@@ -395,6 +397,12 @@ def search_in_file(name, qid):
         for line in file:
             # Attempt to convert the line from a string to a Python dictionary
             try:
+                line = re.sub(r"np\.int64", "int", line)
+                line = re.sub(r"np\.float64", "float", line)
+                line = re.sub(r"np\.nan", "float('nan')", line)
+                line = re.sub(r"int\((\d+)\)", r"\1", line)  # Replace int(x) with x
+                line = re.sub(r"float\(([^)]+)\)", r"\1", line)  # Replace float(x) with x
+                line = line.replace("nan", "'nan'")
                 entry = ast.literal_eval(line.strip())
             except:
                 continue  # Skip lines that cannot be converted to a dictionary
