@@ -365,10 +365,9 @@ def export_dict_to_file(trec_score_dicts_list):
     '''
 
     # We create a text file for every "qid" and we write the corresponding dictionaries
-    with open(output_query_trec_evaluation_file, 'w') as file:
-        for qid, entries in trec_score_dicts_list.items():
-                for entry in entries:
-                    file.write(f"{entry}\n")
+    with open(output_query_trec_evaluation_file, 'a') as file:
+        for entry in trec_score_dicts_list:
+                file.write(f"{entry}\n")
 
 def search_in_file(name, qid):
     '''
@@ -390,6 +389,8 @@ def search_in_file(name, qid):
     :return:
     '''
     # Open the file and read it line by line
+    if not os.path.exists(output_query_trec_evaluation_file):
+        return False
     with open(output_query_trec_evaluation_file, 'r') as file:
         for line in file:
             # Attempt to convert the line from a string to a Python dictionary

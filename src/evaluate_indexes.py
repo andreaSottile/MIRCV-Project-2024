@@ -71,6 +71,7 @@ query_count = 0
 next_qid, next_query = read_query_file(query_file)
 print_log("starting evaluation", 1)
 queries_to_skip = [0]
+next_qid_count = 0
 while True:
     timer = 0
     index_count = 0
@@ -85,7 +86,7 @@ while True:
             #if index_count < 7:
             #    continue
             for algorithm in search_into_file_algorithms:
-                if search_in_file(output_query_trec_evaluation_file, handler.index.name + " " + handler.index.scoring + " " + str(handler.index.topk) + " " + handler.index.algorithm + " " + algorithm, next_qid):
+                if search_in_file(handler.index.name + " " + handler.index.scoring + " " + str(handler.index.topk) + " " + handler.index.algorithm + " " + algorithm, next_qid):
                     continue
                 tic = time.perf_counter()
                 result = handler.query(next_query, algorithm)
@@ -114,10 +115,13 @@ while True:
     next_qid, next_query = read_query_file(query_file)
     if next_qid == -1:
         break  # termination condition: query file is over
+    next_qid_count+=1
+    if next_qid_count == 3:
+        break  # termination condition: query file is over
 
 score_count = 0
 
 export_dict_to_file(trec_score_dicts_list)
 
 print_log("evaluation complete, plotting data", 1)
-# plot_metrics_line_charts(trec_score_dicts_list)
+#plot_metrics_line_charts(trec_score_dicts_list)
