@@ -1,4 +1,7 @@
-from src.config import verbosity_config
+import os
+import ast
+
+from src.config import verbosity_config, output_query_trec_evaluation_file
 
 
 def print_log(msg, priority=0):
@@ -351,6 +354,53 @@ def merge_ranges(ranges):
     return merged
 
 
-def export_dict_to_file(score, score_count):
-    print(score)
-    pass
+def export_dict_to_file(trec_score_dicts_list):
+    '''
+    This code creates a text file (with the name specified by output_query_trec_evaluation_file) and writes entries from
+    a dictionary structure into it. For each unique qid key in trec_score_dicts_list, it iterates over the associated list of entries.
+    Each entry in this list is written as a new line in the file.
+    This effectively saves each entry related to each qid into the file, with each dictionary formatted as a single line.
+
+    :param trec_score_dicts_list: List of trec_eval dictionaries already grouped by Qid
+    '''
+
+    # We create a text file for every "qid" and we write the corresponding dictionaries
+    with open(output_query_trec_evaluation_file, 'w') as file:
+        for qid, entries in trec_score_dicts_list.items():
+                for entry in entries:
+                    file.write(f"{entry}\n")
+
+def search_in_file(name, qid):
+    '''
+    This function checks if a given text file contains a line with specific values for the name and qid keys
+    within a dictionary structure. It takes a file path and two target strings (string1 and string2) as input.
+    For each line, it converts the line from a dictionary-like string to an actual dictionary using ast.literal_eval().
+    If a dictionary in the file has a name value matching name and a qid value matching qid, the function returns True.
+    If no such match is found after reading all lines, it returns False.
+
+    We used ast.literal_eval() instead of eval() for security reasons.
+    Specifically, eval() can execute arbitrary code, which poses a security risk if the file contents are untrusted.
+    For example, if someone put malicious code in the file, eval() could execute it, potentially harming your system or data.
+    ast.literal_eval() is a safer alternative that only evaluates strings that contain basic Python
+    literals (such as dictionaries, lists, numbers, strings, etc.) and prevents execution of code.
+
+    :param file_path: Output query trec eval file path
+    :param name: index name
+    :param qid: QID
+    :return:
+    '''
+    # Open the file and read it line by line
+    with open(output_query_trec_evaluation_file, 'r') as file:
+        for line in file:
+            # Attempt to convert the line from a string to a Python dictionary
+            try:
+                entry = ast.literal_eval(line.strip())
+            except:
+                continue  # Skip lines that cannot be converted to a dictionary
+
+            # Check if the values of 'name' and 'qid' match string1 and string2
+            if entry.get('name') == name and entry.get('qid') == qid:
+                return True  # Return True if a match is found
+
+    # If no matching line is found, return False
+    return False

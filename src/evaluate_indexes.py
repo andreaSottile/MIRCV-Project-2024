@@ -6,11 +6,11 @@ from evaluate import load
 
 from src.config import query_processing_algorithm_config, scoring_function_config, k_returned_results_config, \
     evaluation_trec_queries_2020_path, search_into_file_algorithms, index_config_path, \
-    file_format
+    file_format, output_query_trec_evaluation_file
 from src.modules.InvertedIndex import load_from_disk
 from src.modules.QueryHandler import QueryHandler
 from src.modules.evaluation import read_query_file, create_run_dict, evaluate_on_trec, make_name
-from src.modules.utils import print_log, export_dict_to_file
+from src.modules.utils import print_log, export_dict_to_file, search_in_file
 
 print("Preparing indexes")
 query_handlers_catalogue = []
@@ -85,6 +85,8 @@ while True:
             #if index_count < 7:
             #    continue
             for algorithm in search_into_file_algorithms:
+                if search_in_file(output_query_trec_evaluation_file, handler.index.name + " " + handler.index.scoring + " " + str(handler.index.topk) + " " + handler.index.algorithm + " " + algorithm, next_qid):
+                    continue
                 tic = time.perf_counter()
                 result = handler.query(next_query, algorithm)
                 # result have this structure [(docid, score),....(docid, score)]
@@ -115,9 +117,7 @@ while True:
 
 score_count = 0
 
-for score in trec_score_dicts_list:
-    export_dict_to_file(score, score_count)
-    score_count += 1
+export_dict_to_file(trec_score_dicts_list)
 
 print_log("evaluation complete, plotting data", 1)
 # plot_metrics_line_charts(trec_score_dicts_list)
