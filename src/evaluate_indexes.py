@@ -20,10 +20,12 @@ trec_eval = load("trec_eval")
 # indexes available on hard disk (made with merge_indexes)
 # warning: merge indexes ignores local paths. moving files to different computers requires editing the files
 
-indexes_to_evaluate = ["indexes_full_do_stemming_keep_stopwords", "indexes_full_do_stemming_no_stopwords",
-                       "indexes_full_no_stemming_keep_stopwords", "indexes_full_no_stemming_no_stopwords"]
-compression_sets = ["_uncompressed", "_gamma"]  # skipped: unary (unfeasible disk size)
-
+#indexes_to_evaluate = ["indexes_full_do_stemming_keep_stopwords", "indexes_full_do_stemming_no_stopwords",
+#                       "indexes_full_no_stemming_keep_stopwords", "indexes_full_no_stemming_no_stopwords"]
+indexes_to_evaluate = ["indexes_full_do_stemming_no_stopwords"]
+#compression_sets = ["_uncompressed", "_gamma"]  # skipped: unary (unfeasible disk size)
+compression_sets = ["_uncompressed"]
+search_eval_file_algorithms = ["skipping"]
 config_set = []
 
 index_limit = -1  # test purposes. put -1 to have no limits
@@ -36,7 +38,7 @@ for compression in compression_sets:
             if os.path.exists(index_config_path + local_name + file_format):
 
                 base_index = load_from_disk(local_name)
-                query_algorithm="conjunctive"
+                query_algorithm="disjunctive"
                 scoring_function="TFIDF"
                 topk=20
                 #for query_algorithm in query_processing_algorithm_config:
@@ -71,7 +73,7 @@ trec_score_dicts_list = []
 query_count = 0
 next_qid, next_query = read_query_file(query_file)
 print_log("starting evaluation", 1)
-queries_to_skip = [0]
+queries_to_skip = []
 next_qid_count = 0
 while True:
     timer = 0
@@ -86,7 +88,7 @@ while True:
             index_count += 1
             #if index_count < 7:
             #    continue
-            for algorithm in search_into_file_algorithms:
+            for algorithm in search_eval_file_algorithms:
                 if search_in_file(handler.index.name + " " + handler.index.scoring + " " + str(handler.index.topk) + " " + handler.index.algorithm + " " + algorithm, next_qid):
                     continue
                 tic = time.perf_counter()
@@ -125,4 +127,4 @@ score_count = 0
 export_dict_to_file(trec_score_dicts_list)
 
 print_log("evaluation complete, plotting data", 1)
-#plot_metrics_line_charts(trec_score_dicts_list)
+plot_metrics_line_charts(trec_score_dicts_list)
