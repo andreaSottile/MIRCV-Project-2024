@@ -19,9 +19,10 @@ def cache_check(target_path):
 def cache_flush():
     # remove all the content of the cash, but keep the inizialization (path of files)
     global lexicon_cache, cache_count
-    for source in lexicon_cache.keys():
-        lexicon_cache[source] = []
-        cache_count[source] = 0
+    if lexicon_cache_size > 0:
+        for source in lexicon_cache.keys():
+            lexicon_cache[source] = []
+            cache_count[source] = 0
 
 
 def cache_hit_or_miss(target_path, target_key):
@@ -29,7 +30,7 @@ def cache_hit_or_miss(target_path, target_key):
     # check if the element is cached or not (returns -1 or position in cache)
     cache_check(target_path)
     if not lexicon_cache[target_path]:
-        #if I enter here it means that lexicon_cache[target_path] is empty so we have to insert the first cache entry
+        # if I enter here it means that lexicon_cache[target_path] is empty so we have to insert the first cache entry
         print_log(f"cache miss for {target_key} - first cache entry", 2)
         return -1  # miss: cache empty
     else:

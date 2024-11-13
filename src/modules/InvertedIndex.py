@@ -16,6 +16,7 @@ performance.
 from src.config import *
 import os
 
+from src.modules.cache import cache_flush
 from src.modules.compression import to_unary, to_gamma, bit_stream_to_bytes
 from src.modules.document_processing import open_dataset
 from src.modules.preprocessing import preprocess_text, count_token_occurrences
@@ -81,6 +82,7 @@ class InvertedIndex:
             self.config_path = file_blank_tag
 
     def save_on_disk(self):
+        cache_flush()
         # index config and options are saved on disk, generating a filename based on its name
         if self.name == member_blank_tag:
             print_log("cannot save index config without a name", priority=2)
@@ -122,6 +124,7 @@ class InvertedIndex:
 
     def reload_from_disk(self):
         # function called to load a previously created index, by reading a config file from HD
+        cache_flush()
         # returns True if the loading was successful
         print_log("loading index config file", priority=3)
         if self.config_path == file_blank_tag:
