@@ -119,7 +119,7 @@ def get_bool_input(prompt):
 def get_choice_input(prompt, choices):
     # Function to get choice input
     while True:
-        value = input(prompt).strip().lower()
+        value = input(prompt).strip()
         if value in choices:
             return value
         print(Fore.RED + f"Type the number of your choice ({', '.join(choices)}).")
