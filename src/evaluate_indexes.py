@@ -114,7 +114,7 @@ while True:
                 trec_score_dicts_list.append(trec_score_dict)
                 timer += toc - tic
 
-    print_log(f"evaluation for query{query_count} took {timer} ", 2)
+    print_log(f"evaluation for query{query_count} took {timer} ", 1)
     query_count += 1
     next_qid, next_query = read_query_file(query_file)
     if next_qid == -1:

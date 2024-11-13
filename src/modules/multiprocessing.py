@@ -16,12 +16,12 @@ stop_words = None
 stemmer = None
 
 
-def read_portion_of_dataset(collection_path_config, flags, start_subindex_pos, end_subindex_pos, process_function,
+def read_portion_of_dataset(collection_path, flags, start_subindex_pos, end_subindex_pos, process_function,
                             delete_chunks,
                             delete_after_compression):
     # function that provide a separation of the entire collection within start_subindex_pos and end_subindex_pos and others stuffs
     read_rows = 0
-    dataset = extract_dataset_from_tar(collection_path_config)
+    dataset = extract_dataset_from_tar(collection_path)
     start_subindex_pos, _ = next_GEQ_line(dataset, start_subindex_pos)
     dataset.seek(start_subindex_pos)
     posting_buffer = []  # memory buffer
