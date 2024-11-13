@@ -75,6 +75,7 @@ class QueryHandler:
     def query(self, query_string, search_file_algorithms):
         # executes a whole query, starting from natural language and outputting the top k results
         print_log("received query", 3)
+
         # preprocessing for the query string
         tic = time.perf_counter()
         query_terms = self.prepare_query(query_string)
@@ -114,6 +115,7 @@ class QueryHandler:
         # cache usage: memory holds stats.txt to optimize hdd usage (saves time)
         if flush_doc_size_cache_after_query:
             self.doc_stats_cache = {}
+
         return get_top_k(self.index.topk, scores)
 
     def fetch_posting_lists(self, query_terms, search_algorithm):

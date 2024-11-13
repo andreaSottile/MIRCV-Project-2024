@@ -1,4 +1,6 @@
 import os
+import time
+
 from colorama import Fore, Style, init
 
 from src.config import file_format, index_config_path
@@ -47,8 +49,16 @@ def user_load_parameters():
 def query_execution(query_string):
     global main_query_handler
     if not is_restart_needed():
+
+        print("starting timer")
+        tic = time.perf_counter()
+
         res = main_query_handler.query(query_string, get_parameter("search_algorithm"))
         print_query_result(res)
+
+        toc = time.perf_counter()
+        print(f"query completed in {toc-tic} s")
+
     else:
         print("You have to reindex the collection before querying")
 
