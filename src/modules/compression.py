@@ -45,7 +45,7 @@ def decode_posting_list(compressed_bytes, compression="no"):
     if compression != "no":
         # Convert the bytes back into a bit string
         bit_stream = ''.join(f'{byte:08b}' for byte in compressed_bytes)
-        print(bit_stream)
+        print_log(bit_stream, 8)
 
         # Step 2: Decode the doc IDs
         if compression == "unary":
@@ -74,7 +74,6 @@ def decode_posting_list(compressed_bytes, compression="no"):
             first = False
         else:
             list_doc_id_string += "," + str(doc_id)
-        # list_doc_id.append(doc_id)
         previous_doc_id = doc_id
     posting_list_string_decoded = list_doc_id_string + " "
     first = True
@@ -86,14 +85,11 @@ def decode_posting_list(compressed_bytes, compression="no"):
             posting_list_string_decoded += "," + str(freq)
     return posting_list_string_decoded
 
-    # return list_doc_id, decoded_freqs
-
 
 def decode_unary(bit_stream):
     '''
     The decode_unary function processes the bit stream by counting consecutive 1s followed by a 0 to determine the
     original number (gap).
-
     :param bit_stream:
     :return: gaps
     '''

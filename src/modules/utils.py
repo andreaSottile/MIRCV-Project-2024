@@ -96,7 +96,7 @@ def set_search_interval(file_pointer, start, key, key_delimiter, step_size, id_i
 def next_GEQ_line(file_pointer, position):
     '''
     given a position (bytes in a file), read the next whole line available there
-    IMPORTANT: it works with cursor positions, and NOT with IDs
+    IMPORTANT: it works with cursor positions (offset), and NOT with IDs
     :param file_pointer: pointer to the Lexicon file
     :param position: start position
     :return:
@@ -367,7 +367,7 @@ def export_dict_to_file(trec_score_dicts_list):
     '''
 
     # We create a text file for every "qid" and we write the corresponding dictionaries
-    with open(output_query_trec_evaluation_file, 'a') as file:
+    with open(output_query_trec_evaluation_file, 'a+') as file:
         for entry in trec_score_dicts_list:
                 file.write(f"{entry}\n")
 

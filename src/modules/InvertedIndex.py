@@ -21,24 +21,14 @@ from src.modules.document_processing import open_dataset
 from src.modules.preprocessing import preprocess_text, count_token_occurrences
 from src.modules.utils import readline_with_strip, print_log
 
-# lexicon_buffer = []  # memory buffer
 posting_buffer = []  # memory buffer
 posting_file_list = []  # list of file names
 
 
-# lexicon_file_list = []  # list of file names
-
-
-# REMINDER STRUTTURA POSTING
-# token posting_separator docid docid_separator count element_separator
-# token1:docid1|count;docid2|count;................docidN|count
-
-# REMINDER STRUTTURA LEXICON
-# token ; count
-
+# REMINDER STRUCTURE LEXICON
+# token ; docFreq; offset
 
 class InvertedIndex:
-
     def __init__(self):
         self.name = member_blank_tag
         self.skip_stemming = True
@@ -76,6 +66,7 @@ class InvertedIndex:
         return False
 
     def delete_from_disk(self):
+        # delete function that manage safe remove
         if self.collection_statistics_path != file_blank_tag:
             os.remove(self.collection_statistics_path)
             self.collection_statistics_path = file_blank_tag
@@ -250,6 +241,7 @@ class InvertedIndex:
             print_log("flushed collection for " + self.name, priority=1)
 
     def add_to_collection_stats(self, docid, docno, stats=0):
+        # create stats file with docid, docno, wordcount
         if self.collection_statistics_path == file_blank_tag:
             print_log("CRITICAL ERROR: unable to access collection statistics for " + self.name, priority=0)
             return
@@ -286,41 +278,14 @@ class InvertedIndex:
             print_log(posting_buffer_sorted, 5)
         return chunk_name
 
-    '''
-        def update_to_lexicon(self, filename):
-            # write a chunk of lexicon words to disk
-            # @ param filename: output file path (complete with file format)
-            global lexicon_buffer
-            # lexicon_buffer is a list where each element have this structure:
-            #     [token_id, token_count]
-            chunk_name = index_folder_path + self.name + "/" + filename
-    
-            # MANDATORY: every chunk must be ordinated
-            lexicon_buffer_sorted = sorted(lexicon_buffer, key=lambda x: x[0])
-    
-            try:
-                with open(chunk_name, "w") as file:
-                    for row in lexicon_buffer_sorted:
-                        file.write(str(row[0]) + element_separator + str(row[1]) + chunk_line_separator)
-                lexicon_buffer = []
-            except IOError:
-                print(IOError)
-                print_log("Writing lexicon chunk chunk to file. dumping chunk here: ", 4)
-                print_log(lexicon_buffer_sorted, 4)
-            return chunk_name
-    '''
-
     def scan_dataset(self, limit_row_size=-1, delete_chunks=False, delete_after_compression=False):
-        # global lexicon_buffer
+        # main functions that handle the chunk files, merge and provide the inverted index file
         global posting_buffer
         global posting_file_list
-        # global lexicon_file_list
         print_log("starting dataset scan", priority=1)
 
-        # lexicon_buffer = []  # memory buffer
         posting_buffer = []  # memory buffer
         posting_file_list = []  # list of file names
-        # lexicon_file_list = []  # list of file names
 
         print_log("scan limited to " + str(limit_row_size) + " rows", priority=4)
         open_dataset(limit_row_size, self, add_document_to_index)
@@ -388,22 +353,12 @@ def make_posting_list(list_doc_id, list_freq, compression="no"):
         # Combine the bit streams: number of doc IDs, doc IDs, and frequencies
         bit_stream = ''.join(encoded_gap_list) + ''.join(encoded_freq_list)
 
-        # return bit_stream
-
         # Convert the bit stream into bytes
         compressed_bytes = bit_stream_to_bytes(bit_stream)
         return compressed_bytes
     else:
         posting_string = ",".join(list(map(str, gap_list))) + " " + ",".join(list_freq_sorted) + chunk_line_separator
         return posting_string
-
-
-def read_posting_string(posting_string):
-    lists = posting_string.split(' ')
-    doc_list = lists[0].split(',')
-    freq_list = lists[1].split(',')
-    return doc_list, freq_list
-
 
 def load_from_disk(name):
     # function used to initialise a new invertedIndex by loading it from disk.
@@ -419,6 +374,7 @@ def load_from_disk(name):
 
 
 def index_setup(name, stemming_flag, stop_words_flag, compression_flag, k, join_algorithm, scoring_f):
+    # function used to setup the inverted index class with relative options and save on disk.
     print_log("setup for new index", 1)
     ind = InvertedIndex()
     print_log("created index", 1)
@@ -444,7 +400,6 @@ def index_setup(name, stemming_flag, stop_words_flag, compression_flag, k, join_
 def add_posting_list(token_id, token_count, docid):
     # add new entries in posting list.
     global posting_buffer
-    # print_log("adding new posting list: " + str(token_id), priority=5)
     stats = [docid, token_count]
     found_token = False
     found_doc = False
@@ -498,8 +453,6 @@ def write_output_files(index_file_path, lexicon_path, compression="no"):
 def merge_chunks(file_list, index_file_path, lexicon_file_path, compression="no", delete_after_merge=True):
     written_lines = 0
     reader_list = []  # list of pointers to files
-    doc_list = []
-    occurrence_list = []
     first_element_list = []  # list of the next (lowest) element taken from each file
     for file in file_list:
         reader = open(file, "r+")

@@ -28,6 +28,7 @@ from src.modules.utils import print_log
 
 
 def extract_dataset_from_tar(path):
+    # Opens and extracts "collection.tsv" from a tar.gz file, returning it as a text stream.
     print_log("Opening tar.gz file", priority=2)
     tar = tarfile.open(path, "r:gz")
     dataset_compressed = tar.getmember("collection.tsv")
@@ -38,6 +39,7 @@ def extract_dataset_from_tar(path):
 
 
 def open_dataset(count_limit=-1, index=None, process_function=None):
+    # Opens a dataset file (.tsv or .gz), reads each line, processes valid rows, and logs progress.
     if count_limit > 0 and 0 < limit_input_rows_config < count_limit:
         count_limit = limit_input_rows_config
     # reset row counter
@@ -86,6 +88,7 @@ def open_dataset(count_limit=-1, index=None, process_function=None):
 
 
 def process_dataset_row(d_id, d_no, d_text, process_function=None, index=None):
+    # Processes a dataset row, logging progress; applies process_function if index is provided.
     if d_id % 100000 == 0:
         print_log("processed " + str(d_id), priority=1)
     else:
@@ -104,51 +107,6 @@ def process_dataset_row(d_id, d_no, d_text, process_function=None, index=None):
             print_log("no text found for docid " + str(d_id), priority=3)
     else:  # invalid doc id
         print_log("found invalid docid near row " + str(d_id), priority=3)
-
-
-def fetch_from_collection(requests):
-    # generic function to retrieve data from the dataset
-    # @ param requests : list of docids to retrieve from the dataset
-    # @ returns two lists of docids,texts
-    results_ids = []
-    results_txt = []
-    intervals = []
-    print_log("fetching: ", 4)
-    print_log(requests, 4)
-    # transform each requested element into a 1-long interval
-    for req in requests:
-        if req < 0:
-            print_log("Invalid docid fetch request", 1)
-        else:
-            intervals.append([req, req])
-
-    # merge consecutive intervals
-    for i in range(len(intervals)):
-        if i == 0:
-            continue
-        if intervals[i][0] == intervals[i - 1][1]:
-            # merge
-            intervals[i - 1][1] = intervals[i][1]
-            intervals.remove(intervals[i])
-            i -= 1
-    print_log("required intervals: ", 4)
-    print_log(intervals, 4)
-
-    # access the dataset
-    for interval in intervals:
-        if interval[0] == interval[1]:
-            doc_id, doc_txt = fetch_data_row_from_collection(interval[0])
-            results_ids.append(doc_id)
-            results_txt.append(doc_txt)
-        else:
-            doc_id, doc_txt = fetch_n_data_rows_from_collection(interval[0], interval[1])
-            results_ids.append(doc_id)
-            results_txt.append(doc_txt)
-
-    print_log("fetch completed: n of documents found = " + str(len(results_ids)), 3)
-    print_log(results_ids, 3)
-    return results_ids, results_txt
-
 
 def fetch_data_row_from_collection(row_index):
     # retrieve one single row from the dataset, given the docid

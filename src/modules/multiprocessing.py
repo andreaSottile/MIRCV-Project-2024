@@ -8,6 +8,9 @@ from src.modules.preprocessing import preprocess_text, count_token_occurrences
 from src.config import *
 from multiprocessing import Process
 from src.modules.utils import print_log, next_GEQ_line
+'''
+Multiprocessing module that contains a subset of existing function that be fixed to run in a multi process way. 
+'''
 
 stop_words = None
 stemmer = None
@@ -16,6 +19,7 @@ stemmer = None
 def read_portion_of_dataset(collection_path_config, flags, start_subindex_pos, end_subindex_pos, process_function,
                             delete_chunks,
                             delete_after_compression):
+    # function that provide a separation of the entire collection within start_subindex_pos and end_subindex_pos and others stuffs
     read_rows = 0
     dataset = extract_dataset_from_tar(collection_path_config)
     start_subindex_pos, _ = next_GEQ_line(dataset, start_subindex_pos)
@@ -30,9 +34,6 @@ def read_portion_of_dataset(collection_path_config, flags, start_subindex_pos, e
                                          k=flags[3], join_algorithm=flags[1], scoring_f=flags[2])
     if test_index_element.is_ready():
         if not test_index_element.content_check(int(flags[0] / 2)):
-
-            # lexicon_buffer = []  # memory buffer
-            # lexicon_file_list = []  # list of file names
 
             print_log("scan limited to " + str(flags[0]) + " rows", priority=4)
             while True:
@@ -93,8 +94,9 @@ def read_portion_of_dataset(collection_path_config, flags, start_subindex_pos, e
 
 
 def open_dataset_multiprocess(flag, process_function, delete_chunks, delete_after_compression):
-    # reset row counter
+    # Opens a dataset file (.tsv or .gz), reads each line, processes valid rows, and logs progress in a MULTIPROCESS WAY.
     global procs
+    # reset row counter
     partitions_number = 4
     print_log("opening dataset file", priority=3)
     interval_sub_index = [0]
@@ -106,14 +108,12 @@ def open_dataset_multiprocess(flag, process_function, delete_chunks, delete_afte
             pos = index * subindex_size + subindex_size
             interval_sub_index.append(pos)
         for i in range(partitions_number):
+            # Spawn the process
             proc = Process(target=read_portion_of_dataset, args=(
                 collection_path_config, flag, interval_sub_index[i],
                 interval_sub_index[i + 1], process_function, delete_chunks, delete_after_compression,))
             procs.append(proc)
             proc.start()
-            # read_portion_of_dataset(
-            # dataset, flag, interval_sub_index[i],
-            # interval_sub_index[i + 1], process_function, delete_chunks, delete_after_compression)
 
         # complete the processes
         for proc in procs:
@@ -214,16 +214,6 @@ def add_document_to_index(index, args, posting_buffer, posting_file_list):
             # write chunk in a file, and clean the memory buffer to move on
             posting_buffer, posting_file_list = close_chunk(index, posting_buffer, posting_file_list)
     return posting_buffer, posting_file_list
-
-    '''
-     Possible improvement: disaster recovery
-     Calling the "save_on_disk" function after each update could be a good idea to save the progress in the scan_dataset procedure. 
-     if properly handled, it could be a way to split the execution flow in more instances, like a crash of the code or a 
-     multithreading environment. in order to make it work, it is necessary to remove the lists of file names, and make 
-     the "merge" function infer the files itself. it could work with os.listdir, making a regex on the naming pattern 
-     we have used to rebuild lexicon_file_list and posting_file_list.
-    '''
-
 
 def add_posting_list(token_id, token_count, docid, posting_buffer, posting_file_list):
     # add new entries in posting list.

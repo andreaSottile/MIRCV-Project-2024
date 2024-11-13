@@ -15,6 +15,7 @@ from src.config import query_processing_algorithm_config, scoring_function_confi
 from src.modules.InvertedIndex import load_from_disk, index_setup
 from src.modules.QueryHandler import QueryHandler
 
+# Default Value of initialization of CLI program
 file_count = 500  # user is going to edit this
 method = 'disjunctive'
 scoring = 'BM25'
@@ -27,6 +28,7 @@ index_restart_needed = True
 first_step = 0
 search_algorithm = "ternary"
 index_title = default_index_title
+
 
 def get_parameter(parameter_name):
     if parameter_name == "file_count":
@@ -79,8 +81,8 @@ def print_menu(menu, level=0):
             print_menu(value['submenu'], level + 1)
 
 
-# Function to handle menu selection
 def handle_selection(selection, choice, step):
+    # Function to handle menu selection
     if choice in selection.keys():
         selected = selection[choice]
         print(f"\n{Fore.YELLOW}Selected: {selected['title']}")
@@ -94,8 +96,8 @@ def handle_selection(selection, choice, step):
     return selection, 0
 
 
-# Function to get integer input
 def get_int_input(prompt):
+    # Function to get integer input
     while True:
         try:
             # print(int(input(prompt)))
@@ -105,8 +107,8 @@ def get_int_input(prompt):
             print(Fore.RED + "Select a valid number.")
 
 
-# Function to get boolean input
 def get_bool_input(prompt):
+    # Function to get boolean input
     while True:
         value = input(prompt).strip().lower()
         if value in ['true', 'false']:
@@ -114,8 +116,8 @@ def get_bool_input(prompt):
         print(Fore.RED + "Type 'true' or 'false'.")
 
 
-# Function to get choice input
 def get_choice_input(prompt, choices):
+    # Function to get choice input
     while True:
         value = input(prompt).strip().lower()
         if value in choices:

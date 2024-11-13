@@ -1,3 +1,7 @@
+# REMINDER STRUTTURA POSTING
+# token posting_separator docid docid_separator count element_separator
+# token1:docid1|count;docid2|count;................docidN|count
+
 class PostingList:
     def __init__(self, key):
         self.key = key  # token, string

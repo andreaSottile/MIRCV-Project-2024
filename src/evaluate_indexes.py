@@ -6,10 +6,11 @@ from evaluate import load
 
 from src.config import query_processing_algorithm_config, scoring_function_config, k_returned_results_config, \
     evaluation_trec_queries_2020_path, search_into_file_algorithms, index_config_path, \
-    file_format, output_query_trec_evaluation_file
+    file_format, output_query_trec_evaluation_file, evaluation_trec_queries_2019_path
 from src.modules.InvertedIndex import load_from_disk
 from src.modules.QueryHandler import QueryHandler
-from src.modules.evaluation import read_query_file, create_run_dict, evaluate_on_trec, make_name
+from src.modules.evaluation import read_query_file, create_run_dict, evaluate_on_trec, make_name, \
+    plot_metrics_line_charts
 from src.modules.utils import print_log, export_dict_to_file, search_in_file
 
 print("Preparing indexes")
@@ -25,7 +26,7 @@ compression_sets = ["_uncompressed", "_gamma"]  # skipped: unary (unfeasible dis
 
 config_set = []
 
-index_limit = 3  # test purposes. put -1 to have no limits
+index_limit = -1  # test purposes. put -1 to have no limits
 tic = time.perf_counter()
 for compression in compression_sets:
     for index_name in indexes_to_evaluate:
@@ -64,7 +65,7 @@ print_log(f"total number of configuration sets to evaluate: {len(query_handlers_
 print_log(f"loading index phase took {toc - tic} s", 2)
 print_log("loading trec file", 2)
 
-query_file = open(evaluation_trec_queries_2020_path, "r")
+query_file = open(evaluation_trec_queries_2019_path, "r")
 
 trec_score_dicts_list = []
 query_count = 0
@@ -116,8 +117,8 @@ while True:
     if next_qid == -1:
         break  # termination condition: query file is over
     next_qid_count+=1
-    if next_qid_count == 3:
-        break  # termination condition: query file is over
+    #if next_qid_count == 3:
+    #    break  # termination condition: query file is over
 
 score_count = 0
 
