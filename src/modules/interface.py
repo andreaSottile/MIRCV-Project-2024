@@ -232,7 +232,7 @@ def update_parameter(parameter, main_query_handler):
         opts = "/".join(search_into_file_algorithms)
         globals().update({'search_algorithm': get_choice_input(
             Fore.YELLOW + "Current value: " + str(
-                scoring) + "\n" + "Choose the search function (" + opts + "): ", search_into_file_algorithms)})
+                search_algorithm) + "\n" + "Choose the search function (" + opts + "): ", search_into_file_algorithms)})
 
     else:
         print("Parameter not found: " + str(parameter))
