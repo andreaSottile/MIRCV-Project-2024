@@ -133,7 +133,7 @@ def main():
                 'action': lambda: globals().update({'query_input': input(Fore.YELLOW + "Type your query: ")}),
             },
             '5': {
-                'title': 'Execute' + ' | Restart Needed:' + str(is_restart_needed()) + ')',
+                'title': 'Execute' + ' | ( Restart Needed:' + str(is_restart_needed()) + ')',
                 'action': lambda: query_execution(query_input),
             },
             '6': {
@@ -152,7 +152,8 @@ def main():
         choice = input(f"{Fore.YELLOW}\nSelect an option: {Style.RESET_ALL}")
         if choice == '5' and current_menu == menu:
             _, first_step = handle_selection(menu, choice, first_step)
-            break
+            continue
+            # return to menu after query execution
         else:
             current_menu, first_step = handle_selection(current_menu, choice, first_step)
 

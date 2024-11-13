@@ -24,8 +24,8 @@ import time
 
 def get_top_k(k, results):
     # rearrange a list of QueryResult and cut it to k elements
-    print_log("Results list:", 4)
-    print_log(results, 4)
+    print_log("Results list:", 5)
+    print_log(results, 5)
     result_list = []
     if results != {}:
         print_log("ordering the results list", 4)
@@ -103,15 +103,15 @@ class QueryHandler:
 
         related_documents = self.detect_related_documents(posting_lists)
         toc = time.perf_counter()
-        print("detect related document, created in " + str(toc - tic))
+        print_log("detect related document, created in " + str(toc - tic), 3)
 
         # calculating scoring functions for all related documents
-        print_log("calculating scores for related documents", 3)
+        print_log("calculating scores for related documents", 2)
         tic = time.perf_counter()
 
         scores = self.compute_scoring_function(posting_lists, related_documents, search_file_algorithms)
         toc = time.perf_counter()
-        print("compute scoring created in " + str(toc - tic))
+        print_log("compute scoring created in " + str(toc - tic), 3)
         # cache usage: memory holds stats.txt to optimize hdd usage (saves time)
         if flush_doc_size_cache_after_query:
             self.doc_stats_cache = {}
@@ -211,7 +211,7 @@ class QueryHandler:
                     results[docid] = int(size)
                     if allow_doc_size_caching:
                         # cache is used when a docid is asked more than once
-                        self.doc_stats_cache[docid] = size
+                        self.doc_stats_cache[docid] = int(size)
         return results
 
     def detect_related_documents(self, posting_lists):
@@ -238,6 +238,7 @@ class QueryHandler:
                     candidates.add(new_token_doc_ids)
             else:
                 print_log("CRITICAL ERROR: query algorithm not set", 0)
+                print_log(self.index.algorithm, 0)
                 return []
         # returns a list of related docids
         print_log(f"related documents: {len(candidates)}", 4)
@@ -258,7 +259,7 @@ class QueryHandler:
 
             doc_size = self.fetch_documents_size(related_documents, search_file_algorithms)
             toc = time.perf_counter()
-            print("fetch document size in scoring created in " + str(toc - tic))
+            print_log("fetch document size in scoring created in " + str(toc - tic), 3)
             # WARNING : we know this might load in memory millions of numbers
             # it's cheaper for our hardware to use the memory than accessing the disk at each number required
             # worst case: load the whole stats.txt file (180mb)
@@ -277,7 +278,7 @@ class QueryHandler:
                     index_for_tic1 += 1
                     if index_for_tic1 % 25000 == 0:
                         toc1 = time.perf_counter()
-                        print("25000 doc scored in " + str(toc1 - tic1))
+                        print_log("25000 doc scored in " + str(toc1 - tic1), 3)
                         tic1 = time.perf_counter()
                     # WARNING: we know that sometimes this is going to loop through millions of scoring functions
                     # it's cheaper for our hardware to store the numbers as a very long list than keeping only the top k
@@ -291,6 +292,7 @@ class QueryHandler:
 
                     # weigth of the token for the document relevance
                     w_t_d = 0
+
                     if self.index.scoring == "TFIDF":
                         w_t_d = weight_tfidf(idf, term_freq=postingListObj.freqs[i])
                     elif self.index.scoring == "BM11":
@@ -310,10 +312,10 @@ class QueryHandler:
                         # new relevant document, initialize its score
                         scores[postingListObj.docids[i]] = w_t_d
             toc = time.perf_counter()
-            print("token scored in " + str(toc - tic))
+            print_log("token <" + str(token_key) + "> scored in " + str(toc - tic), 2)
             tic = time.perf_counter()
-        print_log("scores for related documents:", 3)
-        print_log(scores, 3)
+        print_log("scores for related documents:", 5)
+        print_log(scores, 5)  # very verbose
         return scores
 
 
@@ -535,4 +537,7 @@ def weight_bm11(idf, term_freq, avg, doc_len):
         return 0
     if doc_len == 0:
         return 0  # this should not happen (trying to score a document not present)
-    return idf * term_freq / (term_freq + BM_k_one * (doc_len / avg))
+
+    top = idf * term_freq
+    bottom = (term_freq + BM_k_one * (doc_len / avg))
+    return top / bottom
