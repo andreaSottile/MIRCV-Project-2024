@@ -148,8 +148,17 @@ class InvertedIndex:
 
                         self.content_reinit(readline_with_strip(config_file))
                         self.topk = int(readline_with_strip(config_file))
-                        self.algorithm = readline_with_strip(config_file)
-                        self.scoring = readline_with_strip(config_file)
+
+                        alg = readline_with_strip(config_file)
+                        if "query_processing" in str(alg):
+                            self.algorithm = eval(alg)
+                        else:
+                            self.algorithm = alg
+                        score = readline_with_strip(config_file)
+                        if "scoring_function" in str(score):
+                            self.scoring = eval(score)
+                        else:
+                            self.scoring = score
 
                         self.collection_statistics_path = readline_with_strip(config_file)
                         self.index_file_path = readline_with_strip(config_file)
