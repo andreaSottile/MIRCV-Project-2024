@@ -360,6 +360,7 @@ def make_posting_list(list_doc_id, list_freq, compression="no"):
         posting_string = ",".join(list(map(str, gap_list))) + " " + ",".join(list_freq_sorted) + chunk_line_separator
         return posting_string
 
+
 def load_from_disk(name):
     # function used to initialise a new invertedIndex by loading it from disk.
     # @ param name: user is required to remember the name of the file on disk

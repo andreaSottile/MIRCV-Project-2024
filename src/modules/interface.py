@@ -138,6 +138,46 @@ def print_query_result(results):
         print("Relevance: " + str(relevance) + " ; Document: " + str(document))
 
 
+def set_parameter(parameter, value):
+    # update the global variables (runtime value for index parameters)
+    if parameter == "file_count":
+        global file_count
+        file_count = value
+    if parameter == "method":
+        global method
+        if "query_processing_algo" in value:
+            method = eval(value)
+        else:
+            method = value
+    if parameter == "scoring":
+        global scoring
+        if "scoring_function_" in value:
+            scoring = eval(value)
+        else:
+            scoring = value
+    if parameter == "k":
+        global k
+        k = value
+    if parameter == "evaluation":
+        global evaluation
+        evaluation = value
+    if parameter == "compression":
+        global compression
+        compression = value
+    if parameter == "skip_stemming":
+        global skip_stemming
+        skip_stemming = value
+    if parameter == "allow_stop_words":
+        global allow_stop_words
+        allow_stop_words = value
+    if parameter == "search_algorithm":
+        global search_algorithm
+        search_algorithm = value
+    if parameter == "restart":
+        global index_restart_needed
+        index_restart_needed = value
+
+
 def update_parameter(parameter, main_query_handler):
     # updates one parameter using in the index/query
     # warning: parameters on the query do NOT requires to re-index the whole collection

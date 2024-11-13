@@ -22,7 +22,6 @@ from src.modules.utils import get_last_line, ternary_search, get_row_id, print_l
 import time
 
 
-
 def get_top_k(k, results):
     # rearrange a list of QueryResult and cut it to k elements
     print_log("Results list:", 4)
@@ -91,7 +90,6 @@ class QueryHandler:
         print_log("converting post list to dictionaries", 3)
         toc = time.perf_counter()
         print("fetch_raw_posting_list created in " + str(toc - tic))
-
 
         # conjunction/disjunction
         tic = time.perf_counter()
@@ -271,13 +269,13 @@ class QueryHandler:
                 idf = math.log(self.num_docs / len(postingListObj.docids))
                 print_log("calculated IDF : " + str(idf), 4)
                 tic1 = time.perf_counter()
-                index_for_tic1=0
+                index_for_tic1 = 0
                 # read posting list, extract doc_ids from posting list
                 for i in range(len(postingListObj.docids)):
-                    index_for_tic1+=1
-                    if index_for_tic1 % 10000 == 0:
+                    index_for_tic1 += 1
+                    if index_for_tic1 % 25000 == 0:
                         toc1 = time.perf_counter()
-                        print("1000 doc scored in " + str(toc1 - tic1))
+                        print("25000 doc scored in " + str(toc1 - tic1))
                         tic1 = time.perf_counter()
                     # WARNING: we know that sometimes this is going to loop through millions of scoring functions
                     # it's cheaper for our hardware to store the numbers as a very long list than keeping only the top k

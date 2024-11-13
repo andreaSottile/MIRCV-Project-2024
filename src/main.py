@@ -4,7 +4,7 @@ from colorama import Fore, Style, init
 from src.config import file_format, index_config_path
 from src.modules.InvertedIndex import load_from_disk
 from src.modules.interface import handle_selection, print_menu, update_parameter, print_query_result, is_restart_needed, \
-    get_index_name, setup_main_index, get_index_title, user_write_parameters, get_parameter
+    get_index_name, setup_main_index, get_index_title, user_write_parameters, get_parameter, set_parameter
 from src.modules.QueryHandler import QueryHandler
 
 # Initialize colorama
@@ -26,6 +26,20 @@ def user_load_parameters():
         # all the previous parameters (client side) are lost, take the ones read from disk
         main_index_element = load_from_disk(get_index_name())
         main_query_handler = QueryHandler(main_index_element)
+
+        # move the loaded parameters in the user interface
+        set_parameter("file_count", main_index_element.num_doc)
+        set_parameter("method", main_index_element.algorithm)
+        set_parameter("scoring", main_index_element.scoring)
+        set_parameter("k", main_index_element.topk)
+        set_parameter("skip_stemming", main_index_element.skip_stemming)
+        set_parameter("allow_stop_words", main_index_element.allow_stop_words)
+        set_parameter("compression", main_index_element.compression)
+
+        # index loaded, clean the restart flag
+        set_parameter("restart", False)
+
+
     else:
         print("no index found with name " + str(get_index_name()))
 
