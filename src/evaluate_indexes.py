@@ -4,9 +4,8 @@ import time
 
 from evaluate import load
 
-from src.config import query_processing_algorithm_config, scoring_function_config, k_returned_results_config, \
-    evaluation_trec_queries_2020_path, search_into_file_algorithms, index_config_path, \
-    file_format, output_query_trec_evaluation_file, evaluation_trec_queries_2019_path
+from src.config import index_config_path, file_format, evaluation_trec_queries_2019_path, \
+    evaluation_trec_queries_2020_path
 from src.modules.InvertedIndex import load_from_disk
 from src.modules.QueryHandler import QueryHandler
 from src.modules.evaluation import read_query_file, create_run_dict, evaluate_on_trec, make_name, \
@@ -20,10 +19,11 @@ trec_eval = load("trec_eval")
 # indexes available on hard disk (made with merge_indexes)
 # warning: merge indexes ignores local paths. moving files to different computers requires editing the files
 
-#indexes_to_evaluate = ["indexes_full_do_stemming_keep_stopwords", "indexes_full_do_stemming_no_stopwords",
+# indexes_to_evaluate = ["indexes_full_do_stemming_keep_stopwords", "indexes_full_do_stemming_no_stopwords",
 #                       "indexes_full_no_stemming_keep_stopwords", "indexes_full_no_stemming_no_stopwords"]
 indexes_to_evaluate = ["indexes_full_do_stemming_no_stopwords"]
-#compression_sets = ["_uncompressed", "_gamma"]  # skipped: unary (unfeasible disk size)
+# compression_sets = ["_uncompressed", "_gamma"]  # skipped: unary (unfeasible disk size)
+
 compression_sets = ["_uncompressed"]
 search_eval_file_algorithms = ["skipping"]
 config_set = []
@@ -38,13 +38,13 @@ for compression in compression_sets:
             if os.path.exists(index_config_path + local_name + file_format):
 
                 base_index = load_from_disk(local_name)
-                query_algorithm="disjunctive"
-                scoring_function="TFIDF"
-                topk=20
-                #for query_algorithm in query_processing_algorithm_config:
-                #for scoring_function in scoring_function_config:
-                #for topk in k_returned_results_config:
-                #TAB START
+                query_algorithm = "disjunctive"
+                scoring_function = "TFIDF"
+                topk = 20
+                # for query_algorithm in query_processing_algorithm_config:
+                # for scoring_function in scoring_function_config:
+                # for topk in k_returned_results_config:
+                # TAB START
                 # avoid sharing the same index
                 index = copy.deepcopy(base_index)
                 # assign the required parameter configurations
@@ -59,7 +59,7 @@ for compression in compression_sets:
                     print_log(f"loaded {len(query_handlers_catalogue)} indexes", 1)
                 else:
                     break  # test purposes: reduce the number of indexes to evaluate
-                #TAB END
+                # TAB END
             else:
                 print_log("missing index to evaluate: " + str(local_name), 0)
 toc = time.perf_counter()
@@ -67,7 +67,7 @@ print_log(f"total number of configuration sets to evaluate: {len(query_handlers_
 print_log(f"loading index phase took {toc - tic} s", 2)
 print_log("loading trec file", 2)
 
-query_file = open(evaluation_trec_queries_2019_path, "r")
+query_file = open(evaluation_trec_queries_2020_path, "r")
 
 trec_score_dicts_list = []
 query_count = 0
@@ -86,10 +86,11 @@ while True:
         for handler in query_handlers_catalogue:
             print_log(f"running query on index {index_count}", 2)
             index_count += 1
-            #if index_count < 7:
+            # if index_count < 7:
             #    continue
             for algorithm in search_eval_file_algorithms:
-                if search_in_file(handler.index.name + " " + handler.index.scoring + " " + str(handler.index.topk) + " " + handler.index.algorithm + " " + algorithm, next_qid):
+                if search_in_file(handler.index.name + " " + handler.index.scoring + " " + str(
+                        handler.index.topk) + " " + handler.index.algorithm + " " + algorithm, next_qid):
                     continue
                 tic = time.perf_counter()
                 result = handler.query(next_query, algorithm)
@@ -118,8 +119,8 @@ while True:
     next_qid, next_query = read_query_file(query_file)
     if next_qid == -1:
         break  # termination condition: query file is over
-    next_qid_count+=1
-    #if next_qid_count == 3:
+    next_qid_count += 1
+    # if next_qid_count == 3:
     #    break  # termination condition: query file is over
 
 score_count = 0
