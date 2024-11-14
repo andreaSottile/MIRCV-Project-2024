@@ -109,13 +109,13 @@ class InvertedIndex:
             config_file.write(str(self.algorithm) + chunk_line_separator)
             config_file.write(str(self.scoring) + chunk_line_separator)
 
-            self.collection_statistics_path = index_folder_path + self.name + "/" + "stats" + file_format
-            self.index_file_path = index_folder_path + self.name + "/" + "index" + file_format
-            self.lexicon_path = index_folder_path + self.name + "/" + "lexicon" + file_format
+            self.collection_statistics_path = root_directory + self.name + "/" + "stats" + file_format
+            self.index_file_path = root_directory + self.name + "/" + "index" + file_format
+            self.lexicon_path = root_directory + self.name + "/" + "lexicon" + file_format
 
-            config_file.write(self.collection_statistics_path + chunk_line_separator)
-            config_file.write(self.index_file_path + chunk_line_separator)
-            config_file.write(self.lexicon_path + chunk_line_separator)
+            config_file.write(path_absolute_to_local(self.collection_statistics_path + chunk_line_separator))
+            config_file.write(path_absolute_to_local(self.index_file_path + chunk_line_separator))
+            config_file.write(path_absolute_to_local(self.lexicon_path + chunk_line_separator))
 
             config_file.write(str(self.num_doc) + chunk_line_separator)
             config_file.write(str(self.index_len) + chunk_line_separator)
@@ -163,9 +163,9 @@ class InvertedIndex:
                         else:
                             self.scoring = score
 
-                        self.collection_statistics_path = readline_with_strip(config_file)
-                        self.index_file_path = readline_with_strip(config_file)
-                        self.lexicon_path = readline_with_strip(config_file)
+                        self.collection_statistics_path = path_local_to_absolute(readline_with_strip(config_file))
+                        self.index_file_path = path_local_to_absolute(readline_with_strip(config_file))
+                        self.lexicon_path = path_local_to_absolute(readline_with_strip(config_file))
 
                         self.num_doc = int(readline_with_strip(config_file))
                         self.index_len = int(readline_with_strip(config_file))
@@ -553,6 +553,14 @@ def close_chunk(index):
     posting_file_list.append(new_chunk_post)
     print_log("chunks created: ", 5)
     print_log(posting_file_list, 5)
+
+
+def path_local_to_absolute(local_path):
+    return root_directory + local_path
+
+
+def path_absolute_to_local(abs_path):
+    return abs_path.replace(root_directory, "")
 
 
 def add_document_to_index(index, args):

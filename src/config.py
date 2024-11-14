@@ -2,34 +2,39 @@
 IMPORTANT: THIS FILE IS NOT UPDATED BY GIT
 VARIABLES TAGGED WITH "EDIT HERE" REQUIRE MANUAL CONFIGURATION ON EACH MACHINE
 """
-''' LOCAL PATHS '''
+''' CONFIGURE LOCAL PATHS '''
 # EDIT HERE
-#full_collection_compressed = "D:/Repositories/mircv/dataset/collection.tar.gz"
-full_collection_compressed = "/Users/gianluca.cometa/Documents/mircv_dataset/collection.tar.gz"
-# full_collection_compressed = "C:/Users/andre/Downloads/collection.tar.gz"
+# absolute path, terminating with a slash
+root_directory = "D:/Repositories/mircv/dataset/"  # path lorenzo
+# root_directory = r"C:\Users\andre\Desktop\AIDE\mircv\"  # path andrea
+# root_directory = "/Users/gianluca.cometa/Documents/mircv_dataset/"  # path gianluca
 
-# EDIT HERE
-test_collection_uncompressed = "D:/Repositories/mircv/dataset/test.tsv"
-# test_collection_uncompressed = "D:/Repositories/mircv/dataset/test.tsv"
-
-# EDIT HERE
-#full_collection_uncompressed = "D:/Repositories/mircv/dataset/collection.tsv"
-full_collection_uncompressed = "/Users/gianluca.cometa/Documents/mircv_dataset/collection.tsv"
-# full_collection_uncompressed = "C:/Users/andre/Downloads/collection.tsv"
-
-'''collection_path : this is the LOCAL path to the dataset.'''
-# EDIT HERE
-collection_path_config = full_collection_compressed
 
 '''index folder: this folder is going to contain all the files to work with inverted indexes'''
+index_config_path = root_directory + "index_info_"  # file name is going to be added at the end
+index_folder_path = root_directory + "index"  # folder is going to contain several files for each index
+
+# qrel 2019
+evaluation_trec_qrel_2019_path = root_directory + "trec/2019qrels-pass.txt"
+# qrel 2020
+evaluation_trec_qrel_2020_path = root_directory + "trec/2020qrels-pass.txt"
+# queries 2019
+evaluation_trec_queries_2019_path = root_directory + "trec/msmarco-test2019-queries.tsv"
+# queries 2020
+evaluation_trec_queries_2020_path = root_directory + "trec/msmarco-test2020-queries.tsv"
+
+# EVALUATION OUTPUT FILE
+output_query_trec_evaluation_file = root_directory + "evaluation/output.csv"
+
+# INPUT FILES
+full_collection_compressed = root_directory + "collection.tar.gz"
+test_collection_uncompressed = root_directory + "test.tsv"
+full_collection_uncompressed = root_directory + "collection.tsv"
+
+'''collection_path : this is the LOCAL path to the dataset.
+pick one of the input files above   '''
 # EDIT HERE
-#index_config_path = "D:/Repositories/mircv/dataset/index_info_"  # file name is going to be added at the end
-# index_config_path = r"C:\Users\andre\Desktop\AIDE\mircv\index_info_"  # file name is going to be added at the end
-index_config_path = "/Users/gianluca.cometa/Documents/mircv_dataset/index_info_"  # file name is going to be added at the end
-# EDIT HERE
-#index_folder_path = "D:/Repositories/mircv/dataset/index"  # folder is going to contain several files for each index
-index_folder_path = "/Users/gianluca.cometa/Documents/mircv_dataset/index"  # folder is going to contain several files for each index
-# index_folder_path = r"C:\Users\andre\Desktop\AIDE\mircv\index"  # folder is going to contain several files for each index
+collection_path_config = full_collection_compressed
 
 '''
 Dataset Specification. You must use the MSMARCO Passages collection1 available on
@@ -62,29 +67,6 @@ Your program must include an evaluation of the systems using a standard
 collection such as the TREC DL 2019 queries and TREC DL 2019 qrels, or the
 TREC DL 2020 queries and TREC DL 2020 qrels.
 '''
-# EDIT HERE
-# qrel 2019
-#evaluation_trec_qrel_2019_path = "D:/Repositories/mircv/dataset/trec/2019qrels-pass.txt"
-evaluation_trec_qrel_2019_path = "/Users/gianluca.cometa/Documents/mircv_dataset/2019qrels-pass.txt"
-# evaluation_trec_qrel_2019_path = r"C:\Users\andre\Desktop\AIDE\mircv\2019qrels-pass.txt"
-
-# EDIT HERE
-# qrel 2020
-#evaluation_trec_qrel_2020_path = "D:/Repositories/mircv/dataset/trec/2020qrels-pass.txt"
-evaluation_trec_qrel_2020_path = "/Users/gianluca.cometa/Documents/mircv_dataset/2020qrels-pass.txt"
-# evaluation_trec_qrel_2020_path = r"C:\Users\andre\Desktop\AIDE\mircv\2020qrels-pass.txt"
-
-# EDIT HERE
-# queries 2019
-#evaluation_trec_queries_2019_path = "D:/Repositories/mircv/dataset/trec/msmarco-test2019-queries.tsv"
-evaluation_trec_qrel_2020_path = "/Users/gianluca.cometa/Documents/mircv_dataset/2020qrels-pass.txt"
-# evaluation_trec_queries_2019_path = r"C:\Users\andre\Desktop\AIDE\mircv\msmarco-test2019-queries.tsv"
-
-# EDIT HERE
-# queries 2020
-#evaluation_trec_queries_2020_path = "D:/Repositories/mircv/dataset/trec/msmarco-test2020-queries.tsv"
-evaluation_trec_queries_2020_path = "/Users/gianluca.cometa/Documents/mircv_dataset/msmarco-test2020-queries.tsv"
-# evaluation_trec_queries_2020_path = r"C:\Users\andre\Desktop\AIDE\mircv\msmarco-test2020-queries.tsv"
 
 """
 STRING FORMAT CONFIG: list of useful variables to easily remember string separators
@@ -101,10 +83,16 @@ chunk_line_separator = " \n"
 """Debug Verbosity"""
 ''' 
 Raising the verbosity level modify the verbosity of the python console during the execution
-This function is used to properly document and debug the whole project.
+This function is used to properly document and debug the whole project. High value increase verbosity.
+0: only critical errors
+1: core phases
+2: high level modules
+3: timestamps
+4: most function calls
+5-8: loop iterations
 '''
 # EDIT HERE
-verbosity_config = 2
+verbosity_config = 3
 
 '''
 TEST MODE WITH LIMITED ROWS
@@ -117,7 +105,12 @@ If limit is zero, then all the rows are going to  be read (no limit)
 # 100000 rows -> 47 s
 
 # EDIT HERE
-limit_input_rows_config = 0
+limit_input_rows_config = 2500
+
+'''
+Default index name for MAIN execution bound to interface
+'''
+default_index_title = 'default_index'
 
 '''
 CHUNK SIZE FOR INDEXING
@@ -126,8 +119,8 @@ size is counted in number of lines (one line is one posting list).
 DISABLE CHUNK SPLIT: if this variable is -1, there is no splitting in chunks and all the data is loaded into memory 
 '''
 # EDIT HERE
-#index_chunk_size = -1
-index_chunk_size = 1000000
+# index_chunk_size = -1
+index_chunk_size = 100000
 '''
 BM 25 PARAMETERS
 k_one in [1.2,2]
@@ -143,12 +136,29 @@ COMPRESSION OPTIONS
 compression_choices_config = ["no", "unary", "gamma"]
 '''
 QUERY PARAMETERS
-query_step_size_config : how many rows the query is supposed to read at once
 '''
 # options for search algoritms
 search_into_file_algorithms = ["ternary", "skipping"]
-# other parameters
+
 # EDIT HERE
-query_step_size_config = 500
+search_chunk_size_config = 10000  # skipping search: this is the default step size
+
+"""
+Query caching: document size is a row of stats.txt. 
+if each docsize is required more than once, it's going to take a lot of time for useless memory accesses
+"""
 # EDIT HERE
-search_chunk_size_config = 10000  # char size for a search chunk
+allow_doc_size_caching = True  # True (use memory) or False (do not use memory)
+# EDIT HERE
+flush_doc_size_cache_after_query = False  # True (cache lasts only 1 query)
+# or False (memory will eventually hold the whole stats.txt)
+
+"""
+Lexicon caching
+Useful only for evaluation. Make a cache for lexicon files. 
+It is measured in rows read, and one rows contains a token, its frequency, and its positing list. 
+If using multiple indexes at once (evaluation phase), each index has a separate cache.
+"""
+# EDIT HERE
+lexicon_cache_size = 1000
+#

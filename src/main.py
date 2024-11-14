@@ -138,7 +138,7 @@ def main():
             },
             '6': {
                 'title': 'Exit',
-                'action': lambda: print(Fore.MAGENTA + "Quit execution"),
+                'action': lambda: print(Fore.MAGENTA + "Goodbye, press Control+C"),
             }
         }
 
