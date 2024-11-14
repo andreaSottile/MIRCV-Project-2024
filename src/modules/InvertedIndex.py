@@ -322,10 +322,10 @@ class InvertedIndex:
 
         if delete_after_compression:
             print_log("deleted uncompressed index file", priority=1)
-            for filename in os.listdir(index_folder_path + self.name):
+            for filename in os.listdir(root_directory + self.name):
                 # look for files with name starting with "chunk"
                 if filename.startswith("chunk"):
-                    file_path = os.path.join(index_folder_path + self.name, filename)
+                    file_path = os.path.join(root_directory + self.name, filename)
                     try:
                         # delete file
                         os.remove(file_path)
@@ -570,8 +570,8 @@ def add_document_to_index(index, args):
     if len(args) != 3:
         print_log("CRITICAL ERROR: missing arguments to add document to index : " + str(args), 0)
         return
-    if not os.path.exists(index_folder_path + index.name):
-        os.mkdir(index_folder_path + index.name)
+    if not os.path.exists(root_directory + index.name):
+        os.mkdir(root_directory + index.name)
         print_log("created new directory for index files", priority=3)
     docid, docno, doctext = args[0], args[1], args[2]
 
