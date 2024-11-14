@@ -93,11 +93,11 @@ def read_portion_of_dataset(collection_path, flags, start_subindex_pos, end_subi
     print_log("read finished", priority=4)
 
 
-def open_dataset_multiprocess(flag, process_function, delete_chunks, delete_after_compression):
+def open_dataset_multiprocess(flag, process_function, delete_chunks, delete_after_compression, parts):
     # Opens a dataset file (.tsv or .gz), reads each line, processes valid rows, and logs progress in a MULTIPROCESS WAY.
     global procs
     # reset row counter
-    partitions_number = 4
+    partitions_number = parts
     print_log("opening dataset file", priority=3)
     interval_sub_index = [0]
     if collection_path_config.endswith(".gz"):
